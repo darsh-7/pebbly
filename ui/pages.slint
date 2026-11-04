@@ -273,8 +273,8 @@ export component AppearanceInspector inherits VerticalLayout {
             label: @tr("Konum");
             MiniSlider {
                 value <=> Store.pill-offset;
-                minimum: -200;
-                maximum: 200;
+                minimum: -1600;
+                maximum: 1600;
                 step: 2;
                 centred: true;
                 text: Fmt.offset(Store.pill-offset);

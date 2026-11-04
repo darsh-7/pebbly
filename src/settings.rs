@@ -418,7 +418,7 @@ impl Settings {
         self.brief_name = self.brief_name.trim().chars().take(24).collect::<String>().trim_end().to_string();
         self.card_leave_close_ms = self.card_leave_close_ms.clamp(200, 3000);
         self.claude_ask_wait_s = self.claude_ask_wait_s.clamp(10, 300);
-        self.pill_offset_dip = self.pill_offset_dip.clamp(-200, 200);
+        self.pill_offset_dip = self.pill_offset_dip.clamp(-1600, 1600);
         self.pill_opacity_pct = self.pill_opacity_pct.clamp(70, 100);
         self.material_darkness_pct = self.material_darkness_pct.clamp(10, 60);
         self.material_saturation_pct = self.material_saturation_pct.clamp(100, 250);
