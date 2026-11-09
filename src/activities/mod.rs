@@ -39,6 +39,7 @@ pub mod weather_alert;
 pub mod weather_worker;
 pub mod wellbeing;
 pub mod wellbeing_worker;
+pub mod watch;
 pub mod zip;
 
 use std::cmp::Reverse;
@@ -222,6 +223,7 @@ fn rank(p: &Presence, now_ms: u64, keep_ms: u64, buds_front: u64) -> Option<u8> 
         (ActivityKind::Live(_), PresenceState::Waiting) if age < live::LIVE_WAIT_URGENT_MS => Some(1),
         (ActivityKind::Live(_), PresenceState::Waiting) => Some(3),
         (ActivityKind::Live(_), PresenceState::Done) if age < live::LIVE_DONE_MS => Some(1),
+        (ActivityKind::Live(_), PresenceState::Done) if age < live::live_done_ms() => Some(6),
         (ActivityKind::Live(_), PresenceState::Done) => None,
         (ActivityKind::Live(_), _) => Some(6),
         (ActivityKind::Media(_), _) if age <= keep_ms => Some(8),
@@ -264,7 +266,41 @@ pub fn add_idle(p: &mut Vec<Presence>, now_ms: u64, idle_clock: bool, weather_be
 
 /// Front first. Paused media older than 10 min is dropped. `user_front` = (kind, picked_ms)
 /// holds until any presence changes after picked_ms.
+/// How long a fresh change pops to the front (settings; 0: off).
+pub fn pop_ms() -> u64 {
+    let s = crate::settings::current();
+    if s.alert_pop { s.alert_pop_s as u64 * 1000 } else { 0 }
+}
+
+/// Whether a change of this kind pops at all: live items (Claude, scripts, apps, the PC and
+/// dev-server watchers), Explorer copying, and music when `media` allows it. The rest has its
+/// own moments.
+fn pops_kind(p: &Presence, media: bool) -> bool {
+    match p.kind {
+        ActivityKind::Live(_) | ActivityKind::Transfer => true,
+        ActivityKind::Media(_) => media && p.state == PresenceState::Playing,
+        _ => false,
+    }
+}
+
+/// Whether `p` changed less than `pop` ms ago and pops: it goes ahead of the user's pick, and
+/// the pick is back once it's over (changed_ms 0 is "never news").
+pub fn popped(p: &Presence, now_ms: u64, pop: u64, media: bool) -> bool {
+    pop > 0 && p.changed_ms > 0 && now_ms.saturating_sub(p.changed_ms) < pop && pops_kind(p, media)
+}
+
+/// In how many ms the soonest pop ends (the tick's job: the pick comes back then).
+pub fn pop_ends_in(p: &[Presence], now_ms: u64) -> Option<u64> {
+    let (pop, media) = (pop_ms(), crate::settings::current().alert_pop_media);
+    p.iter().filter(|x| popped(x, now_ms, pop, media)).map(|x| x.changed_ms + pop - now_ms).min()
+}
+
 pub fn stack_order(p: &[Presence], now_ms: u64, user_front: Option<(ActivityKind, u64)>) -> Vec<ActivityKind> {
+    stack_order_with(p, now_ms, user_front, pop_ms(), crate::settings::current().alert_pop_media)
+}
+
+/// `stack_order` with the pop window (`pop` ms, 0: off) given.
+pub fn stack_order_with(p: &[Presence], now_ms: u64, user_front: Option<(ActivityKind, u64)>, pop: u64, media: bool) -> Vec<ActivityKind> {
     let (keep, buds_front) = (media_paused_keep_ms(), buds_front_ms());
     let mut ranked: Vec<(u8, Reverse<u64>, ActivityKind)> =
         p.iter().filter_map(|x| rank(x, now_ms, keep, buds_front).map(|r| (r, Reverse(x.changed_ms), x.kind))).collect();
@@ -272,7 +308,8 @@ pub fn stack_order(p: &[Presence], now_ms: u64, user_front: Option<(ActivityKind
     let rank_of: Vec<(ActivityKind, u8)> = ranked.iter().map(|(r, _, k)| (*k, *r)).collect();
     let mut order: Vec<ActivityKind> = ranked.into_iter().map(|(_, _, k)| k).collect();
     if let Some((kind, picked_ms)) = user_front {
-        let superseded = p.iter().any(|x| x.changed_ms > picked_ms);
+        // A change that pops only borrows the front: the pick is back after it.
+        let superseded = p.iter().any(|x| x.changed_ms > picked_ms && !(pop > 0 && pops_kind(x, media)));
         if let (false, Some(i)) = (superseded, order.iter().position(|k| *k == kind)) {
             let picked = order.remove(i);
             order.insert(0, picked);
@@ -280,7 +317,13 @@ pub fn stack_order(p: &[Presence], now_ms: u64, user_front: Option<(ActivityKind
     }
     // A finished timer (rank 0) and a moment while it plays (rank 1) go ahead of the user's
     // pick (stable: the rest keeps its order, so the pick is back in front once the moment ends).
-    let urgent = |k: &ActivityKind| rank_of.iter().find(|(kind, _)| kind == k).map_or(2, |(_, r)| (*r).min(2));
+    // Picked after it popped: the user moved on from it.
+    let after_pick = |x: &Presence| user_front.is_none_or(|(_, picked_ms)| x.changed_ms > picked_ms);
+    let fresh = |k: &ActivityKind| p.iter().any(|x| x.kind == *k && popped(x, now_ms, pop, media) && after_pick(x));
+    let urgent = |k: &ActivityKind| {
+        let r = rank_of.iter().find(|(kind, _)| kind == k).map_or(2, |(_, r)| (*r).min(2));
+        if fresh(k) { r.min(1) } else { r }
+    };
     order.sort_by_key(urgent);
     order
 }
@@ -293,6 +336,20 @@ mod tests {
 
     fn p(kind: ActivityKind, state: PresenceState, changed_ms: u64) -> Presence {
         Presence { kind, state, changed_ms }
+    }
+
+    #[test]
+    fn a_new_event_pops_then_the_pick_is_back() {
+        let picked = Some((Media(1), 1_000));
+        let live = [p(Media(1), Playing, 100), p(Live(7), Running, 2_000)];
+        assert_eq!(stack_order_with(&live, 3_000, picked, 5_000, false).first(), Some(&Live(7)), "pops ahead of the pick");
+        assert_eq!(stack_order_with(&live, 7_001, picked, 5_000, false).first(), Some(&Media(1)), "the pick is back");
+        assert_eq!(stack_order_with(&live, 3_000, picked, 0, false), vec![Media(1), Live(7)], "off: no pop, the stack's own order");
+        let moved_on = Some((Media(1), 2_500));
+        assert_eq!(stack_order_with(&live, 3_000, moved_on, 5_000, false).first(), Some(&Media(1)), "picked after the pop: stays");
+        let song = p(Media(1), Playing, 2_000);
+        assert!(!popped(&song, 3_000, 5_000, false), "music pops only when asked");
+        assert!(popped(&song, 3_000, 5_000, true));
     }
 
     #[test]

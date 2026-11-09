@@ -98,6 +98,10 @@ pub fn parse_push(args: &[String]) -> Option<LiveMsg> {
 pub const LIVE_WAIT_URGENT_MS: u64 = 4_000;
 /// A finished item shows this long, then leaves.
 pub const LIVE_DONE_MS: u64 = 5_000;
+/// How long a finished item stays (settings): the first `LIVE_DONE_MS` in front, then behind.
+pub fn live_done_ms() -> u64 {
+    (crate::settings::current().live_done_keep_s as u64 * 1000).max(LIVE_DONE_MS)
+}
 /// No message for this long: the sender is gone.
 pub const LIVE_STALE_MS: u64 = 3_600_000;
 /// A Claude item still working or waiting with no message for this long: Esc (at a prompt or at
@@ -240,7 +244,7 @@ impl LiveSet {
     /// `rank`), stale once a full quiet period has passed.
     fn gone_at(i: &LiveItem) -> u64 {
         let stale = match i.state {
-            LiveState::Done => i.changed_ms + LIVE_DONE_MS,
+            LiveState::Done => i.changed_ms + live_done_ms(),
             LiveState::Run | LiveState::Wait if i.claude => i.seen_ms + LIVE_CLAUDE_STALE_MS + 1,
             _ => i.seen_ms + LIVE_STALE_MS + 1,
         };
@@ -260,6 +264,8 @@ impl LiveSet {
     pub fn moment_in(&self, now_ms: u64) -> Option<u64> {
         let end = |i: &LiveItem| match i.state {
             LiveState::Wait => Some(i.changed_ms + LIVE_WAIT_URGENT_MS),
+            // In front for LIVE_DONE_MS, then behind until it goes: both are a change.
+            LiveState::Done if now_ms < i.changed_ms + LIVE_DONE_MS => Some(i.changed_ms + LIVE_DONE_MS),
             LiveState::Done => Some(Self::gone_at(i)),
             LiveState::Run | LiveState::Clear => None,
         };
@@ -416,6 +422,7 @@ pub fn pill_status(item: &LiveItem, now_ms: u64) -> String {
             Some(short) if !short.is_empty() => short.to_string(),
             _ => tr("Bekliyor").to_string(),
         },
+        LiveState::Done if item.id.starts_with("watch:") && !item.text.is_empty() => item.text.clone(),
         LiveState::Done | LiveState::Clear => tr("Bitti").to_string(),
     }
 }

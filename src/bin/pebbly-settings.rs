@@ -15,7 +15,7 @@ use pebbly::platform::audio::{list_outputs, picker_order};
 use pebbly::platform::fullscreen::visible_apps;
 use pebbly::render::card::output_subline;
 use pebbly::settings::{
-    self, AnimationSpeed, CardSize, FollowedTeam, Hotkey, Marquee, PillButtons, PillSize, QuestionHotkey, Settings, Theme as Look, TrayClick, WeatherCity,
+    self, AnimationSpeed, CardSize, FollowedTeam, Hotkey, Marquee, PillButtons, PillSize, QuestionHotkey, Settings, SwitchHotkey, Theme as Look, TrayClick, WeatherCity,
 };
 use pebbly::activities::buds::Paired;
 use pebbly::i18n::{self, Language, LanguagePick};
@@ -45,6 +45,7 @@ use pebbly_ui::*;
 const TITLE: PCWSTR = w!("Pebbly Ayarları");
 const HOTKEYS: [Hotkey; 5] = [Hotkey::WinAltN, Hotkey::WinAltT, Hotkey::CtrlAltN, Hotkey::WinShiftN, Hotkey::Off];
 const QUESTION_HOTKEYS: [QuestionHotkey; 3] = [QuestionHotkey::WinAltC, QuestionHotkey::WinShiftC, QuestionHotkey::Off];
+const SWITCH_HOTKEYS: [SwitchHotkey; 3] = [SwitchHotkey::WinAltArrows, SwitchHotkey::CtrlAltArrows, SwitchHotkey::Off];
 const KEEP_MIN: [u32; 5] = [1, 5, 10, 30, 0];
 const ADD_MIN: [u32; 3] = [1, 5, 10];
 const BUDS_FRONT_S: [u32; 4] = [0, 5, 15, 30];
@@ -448,6 +449,26 @@ fn fill(ui: &SettingsWindow, s: &Settings, live_apps: &[String]) {
     st.set_leave_ms(s.card_leave_close_ms as f32);
     st.set_wheel_switches(s.wheel_switches_activity);
     st.set_keep_user_front(s.keep_user_front);
+    st.set_alert_pop(s.alert_pop);
+    st.set_alert_pop_s(s.alert_pop_s as f32);
+    st.set_alert_pop_media(s.alert_pop_media);
+    st.set_alert_sound(s.alert_sound);
+    st.set_alert_sound_name(settings::SOUND_NAMES.iter().position(|n| *n == s.alert_sound_name).unwrap_or(0) as i32);
+    st.set_alert_sound_done(s.alert_sound_done);
+    st.set_alert_sound_fullscreen(s.alert_sound_fullscreen);
+    st.set_switch_hotkey(index_of(&SWITCH_HOTKEYS, &s.switch_hotkey, 0));
+    st.set_live_done_keep(s.live_done_keep_s as f32);
+    st.set_health_on(s.health_on);
+    st.set_health_cpu(s.health_cpu_pct as f32);
+    st.set_health_ram(s.health_ram_pct as f32);
+    st.set_health_disk(s.health_disk_gb as f32);
+    st.set_health_for(s.health_for_s as f32);
+    st.set_health_every(s.health_every_s as f32);
+    st.set_dev_on(s.dev_on);
+    st.set_dev_ports(s.dev_ports.clone().into());
+    st.set_dev_docker(s.dev_docker);
+    st.set_dev_docker_filter(s.dev_docker_filter.clone().into());
+    st.set_dev_every(s.dev_every_s as f32);
     st.set_theme(index_of(&[Look::System, Look::Dark, Look::Light], &s.settings_theme, 0));
     st.set_media_on(s.media_enabled);
     st.set_pill_buttons(index_of(&[PillButtons::All, PillButtons::Play, PillButtons::None], &s.media_pill_buttons, 0));
@@ -563,6 +584,26 @@ fn read(ui: &SettingsWindow, base: &Settings) -> Settings {
         card_leave_close_ms: st.get_leave_ms().round() as u32,
         wheel_switches_activity: st.get_wheel_switches(),
         keep_user_front: st.get_keep_user_front(),
+        alert_pop: st.get_alert_pop(),
+        alert_pop_s: st.get_alert_pop_s().round() as u32,
+        alert_pop_media: st.get_alert_pop_media(),
+        alert_sound: st.get_alert_sound(),
+        alert_sound_name: settings::SOUND_NAMES.get(st.get_alert_sound_name().max(0) as usize).unwrap_or(&settings::SOUND_NAMES[0]).to_string(),
+        alert_sound_done: st.get_alert_sound_done(),
+        alert_sound_fullscreen: st.get_alert_sound_fullscreen(),
+        switch_hotkey: pick(&SWITCH_HOTKEYS, st.get_switch_hotkey(), SwitchHotkey::WinAltArrows),
+        live_done_keep_s: st.get_live_done_keep().round() as u32,
+        health_on: st.get_health_on(),
+        health_cpu_pct: st.get_health_cpu().round() as u8,
+        health_ram_pct: st.get_health_ram().round() as u8,
+        health_disk_gb: st.get_health_disk().round() as u32,
+        health_for_s: st.get_health_for().round() as u32,
+        health_every_s: st.get_health_every().round() as u32,
+        dev_on: st.get_dev_on(),
+        dev_ports: st.get_dev_ports().to_string(),
+        dev_docker: st.get_dev_docker(),
+        dev_docker_filter: st.get_dev_docker_filter().trim().to_string(),
+        dev_every_s: st.get_dev_every().round() as u32,
         settings_theme: pick(&[Look::System, Look::Dark, Look::Light], st.get_theme(), Look::System),
         media_enabled: st.get_media_on(),
         media_pill_buttons: pick(&[PillButtons::All, PillButtons::Play, PillButtons::None], st.get_pill_buttons(), PillButtons::All),

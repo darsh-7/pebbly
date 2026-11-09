@@ -60,6 +60,8 @@ pub enum UiEvent {
     Char(u16),
     /// The question card's shortcut.
     QuestionHotkey,
+    /// The stack's shortcuts: -1 back (←), 1 on (→), 0 the latest alert (↑).
+    SwitchHotkey(i8),
     /// Claude's answer moved on (its mailbox has it).
     Question,
     /// The tray icon was clicked.
@@ -155,6 +157,8 @@ pub const WM_API: u32 = WM_APP + 20;
 pub const WM_SHELF_TOOL: u32 = WM_APP + 21;
 pub const WM_TRANSFER: u32 = WM_APP + 22;
 pub const WM_QUESTION: u32 = WM_APP + 23;
+/// The PC and dev-server watcher queued live items (as `ipc` does).
+pub const WM_WATCH: u32 = WM_APP + 24;
 
 static MAIN_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 static TASKBAR_CREATED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -256,6 +260,10 @@ pub fn post_transfer() {
 
 pub fn post_question() {
     post_main(WM_QUESTION);
+}
+
+pub fn post_watch() {
+    post_main(WM_WATCH);
 }
 
 thread_local! {
@@ -457,7 +465,13 @@ extern "system" fn main_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LR
             LRESULT(0)
         }
         WM_HOTKEY => {
-            push_event(if wp.0 as i32 == super::hotkey::QUESTION_ID { UiEvent::QuestionHotkey } else { UiEvent::Hotkey });
+            push_event(match wp.0 as i32 {
+                super::hotkey::QUESTION_ID => UiEvent::QuestionHotkey,
+                super::hotkey::PREV_ID => UiEvent::SwitchHotkey(-1),
+                super::hotkey::NEXT_ID => UiEvent::SwitchHotkey(1),
+                super::hotkey::LATEST_ID => UiEvent::SwitchHotkey(0),
+                _ => UiEvent::Hotkey,
+            });
             LRESULT(0)
         }
         WM_WTSSESSION_CHANGE => {
@@ -492,8 +506,9 @@ extern "system" fn main_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LR
             None => LRESULT(0),
         },
         WM_EFFECTS | WM_MEDIA | WM_OUTPUT | WM_BUDS | WM_VOLUME | WM_SETTINGS_FILE | WM_MATCHES | WM_LYRICS | WM_PRIVACY | WM_HEADSETS | WM_WEATHER | WM_SHELF | WM_CAPTURE | WM_UPDATE
-        | WM_TASKBAR_ITEMS | WM_WALLPAPER | WM_GAMES | WM_WELLBEING | WM_API | WM_SHELF_TOOL | WM_TRANSFER | WM_QUESTION => {
+        | WM_TASKBAR_ITEMS | WM_WALLPAPER | WM_GAMES | WM_WELLBEING | WM_API | WM_SHELF_TOOL | WM_TRANSFER | WM_QUESTION | WM_WATCH => {
             push_event(match msg {
+                WM_WATCH => UiEvent::Ipc,
                 WM_API => UiEvent::Api,
                 WM_QUESTION => UiEvent::Question,
                 WM_SHELF_TOOL => UiEvent::ShelfTool,

@@ -78,7 +78,7 @@ use crate::platform::audio::{
 };
 use crate::platform::autostart::{autostart_enabled, follow_exe, set_autostart};
 use crate::platform::fullscreen::{foreground_exe, fullscreen_now, monitor_of, never_fullscreen, ForegroundMoveHook};
-use crate::platform::hotkey::{register_hotkey, register_question_hotkey};
+use crate::platform::hotkey::{register_hotkey, register_question_hotkey, register_switch_hotkeys};
 use crate::activities::question::{lines_estimate, plain, Edit as FieldEdit, Field};
 use crate::activities::question_worker::{AskBox, AskMailbox, AskState, AskWorker};
 use crate::render::card::{QuestionCard, QuestionShow};
@@ -884,6 +884,10 @@ impl App {
         if let Err(e) = register_question_hotkey(main.hwnd, settings::current().hotkey_question) {
             log(&format!("question shortcut is taken by another app: {e:?}"));
         }
+        if let Err(e) = register_switch_hotkeys(main.hwnd, settings::current().switch_hotkey) {
+            log(&format!("a switch shortcut is taken by another app: {e:?}"));
+        }
+        crate::activities::watch::follow_settings();
         // Transparency effects on/off (also flips with Energy Saver); raised on a worker thread.
         let ui_settings = UISettings::new().ok();
         if let Some(settings) = &ui_settings {
@@ -2719,6 +2723,10 @@ impl App {
         if let Some(ms) = self.live.moment_in(now) {
             sooner(ms + 5);
         }
+        // A popped change goes back behind the user's pick when its seconds are over.
+        if let Some(ms) = crate::activities::pop_ends_in(&self.presences(now), now) {
+            sooner(ms + 5);
+        }
         // A run's time ticks in the pill or its card.
         let shown = [self.stack.first().copied(), self.open.and_then(|o| if let OpenCard::Activity(k) = o { Some(k) } else { None })];
         for key in shown.into_iter().flatten().filter_map(|k| if let ActivityKind::Live(key) = k { Some(key) } else { None }) {
@@ -3083,6 +3091,7 @@ impl App {
             self.api.take(call, &mut self.live, &s.api_apps, s.enabled && s.api_enabled, now);
         }
         self.note_live(&before);
+        self.alert_sound(&before);
         self.refresh()
     }
 
@@ -3189,7 +3198,24 @@ impl App {
             }
         }
         self.note_live(&before);
+        self.alert_sound(&before);
         self.refresh()
+    }
+
+    /// A soft sound (settings) when a live item starts waiting for the user (Claude asks, a
+    /// server or the PC is in trouble) or a Claude session finishes; quiet over fullscreen.
+    fn alert_sound(&self, before: &[(u32, LiveState)]) {
+        let s = settings::current();
+        if !s.alert_sound || (self.fullscreen && !s.alert_sound_fullscreen) {
+            return;
+        }
+        let news = self.live.items().iter().any(|i| {
+            let was = before.iter().find(|(k, _)| *k == i.key).map(|(_, st)| *st);
+            was != Some(i.state) && (i.state == LiveState::Wait || (i.state == LiveState::Done && i.claude && s.alert_sound_done))
+        });
+        if news {
+            play_windows_sound(&s.alert_sound_name);
+        }
     }
 
     /// A bud came out or went back in: pause what plays, or play again what that paused.
@@ -3274,6 +3300,12 @@ impl App {
                 log(&format!("question shortcut is taken by another app: {e:?}"));
             }
         }
+        if new.switch_hotkey != old.switch_hotkey {
+            if let Err(e) = register_switch_hotkeys(self.main.hwnd, new.switch_hotkey) {
+                log(&format!("a switch shortcut is taken by another app: {e:?}"));
+            }
+        }
+        crate::activities::watch::follow_settings();
         if new.accent_from_wallpaper && !old.accent_from_wallpaper {
             self.check_wallpaper();
         }
@@ -3805,6 +3837,16 @@ impl App {
             next: text(i.map_or(0, |i| i + 1)),
             progress: if i.is_some() { pos_ms.saturating_sub(started) as f32 / LYRIC_MOVE_MS as f32 } else { 1.0 },
         })
+    }
+
+    /// Win+Alt+↑: what changed last (the latest alert) comes to the front, as a pick.
+    fn front_latest(&mut self) -> Result<()> {
+        let now = now_ms();
+        let shown = stack_order(&self.presences(now), now, None);
+        let latest = self.presences(now).into_iter().filter(|p| p.changed_ms > 0 && shown.contains(&p.kind)).max_by_key(|p| p.changed_ms);
+        let Some(latest) = latest else { return Ok(()) };
+        self.user_front = Some((latest.kind, now));
+        self.refresh()
     }
 
     /// One swipe (wheel, tilt wheel or touchpad) through the stack: the next (`step` > 0) or
@@ -4394,6 +4436,8 @@ impl App {
             UiEvent::ShelfTool => self.take_tools(),
             UiEvent::Transfer => self.take_transfer(),
             UiEvent::QuestionHotkey => self.open_question(),
+            UiEvent::SwitchHotkey(0) => self.front_latest(),
+            UiEvent::SwitchHotkey(step) => self.step_front(step as i32),
             UiEvent::Char(unit) if self.open == Some(OpenCard::Question) => self.question_key(unit),
             UiEvent::Question => self.take_question(),
             UiEvent::Timer(TIMER_CARET) => {

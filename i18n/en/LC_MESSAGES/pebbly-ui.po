@@ -3753,3 +3753,187 @@ msgstr "Moving over from Now Bar"
 #: setup/src/main.rs
 msgid "Now Bar v{} kurulu · Pebbly'ye geçecek"
 msgstr "Now Bar v{} installed · moves to Pebbly"
+
+#: src/activities/watch.rs
+msgid "İşlemci %{}"
+msgstr "CPU {}%"
+
+#: src/activities/watch.rs
+msgid "Normale döndü"
+msgstr "Back to normal"
+
+#: src/activities/watch.rs
+msgid "Bellek %{}"
+msgstr "Memory {}%"
+
+#: src/activities/watch.rs
+msgid "Dolu"
+msgstr "Almost full"
+
+#: src/activities/watch.rs
+msgid "C: {} GB boş"
+msgstr "C: {} GB free"
+
+#: src/activities/watch.rs
+msgid "Az yer"
+msgstr "Low space"
+
+#: src/activities/watch.rs
+msgid "Yer açıldı"
+msgstr "Space freed"
+
+#: src/activities/watch.rs
+msgid "Çalışıyor yine"
+msgstr "Back up"
+
+#: src/activities/watch.rs
+msgid "Durdu"
+msgstr "Down"
+
+#: ui/pages.slint
+msgid "Etkinlikler arası geç"
+msgstr "Switch activities"
+
+#: ui/pages.slint
+msgid "← → gezer, ↑ son uyarı"
+msgstr "← → step, ↑ latest alert"
+
+#: ui/pages.slint
+msgid "Uyarılar"
+msgstr "Alerts"
+
+#: ui/pages.slint
+msgid "Yeni olan öne gelsin"
+msgstr "New events pop up"
+
+#: ui/pages.slint
+msgid "Sonra seçtiğine döner"
+msgstr "Then back to your pick"
+
+#: ui/pages.slint
+msgid "Önde kalma"
+msgstr "Pop-up time"
+
+#: ui/pages.slint
+msgid "Müzik de öne gelsin"
+msgstr "Music pops up too"
+
+#: ui/pages.slint
+msgid "Bir şarkı başlayınca"
+msgstr "When a song starts"
+
+#: ui/pages.slint
+msgid "Uyarı sesi"
+msgstr "Alert sound"
+
+#: ui/pages.slint
+msgid "Claude seni bekleyince, sunucu ya da bilgisayar sorun çıkarınca"
+msgstr "When Claude needs you, or a server or the PC has trouble"
+
+#: ui/pages.slint
+msgid "Ses"
+msgstr "Sound"
+
+#: ui/pages.slint
+msgid "Takvim"
+msgstr "Calendar"
+
+#: ui/pages.slint
+msgid "Mesaj"
+msgstr "Message"
+
+#: ui/pages.slint
+msgid "Çanlar"
+msgstr "Chimes"
+
+#: ui/pages.slint
+msgid "Claude bitirince de"
+msgstr "Also when Claude finishes"
+
+#: ui/pages.slint
+msgid "Tam ekranda da çal"
+msgstr "Play over fullscreen too"
+
+#: ui/pages.slint
+msgid "Oyun ya da video açıkken"
+msgstr "While a game or video is open"
+
+#: ui/pages.slint
+msgid "Biten kalsın"
+msgstr "Keep finished"
+
+#: ui/pages.slint
+msgid "Claude bitince pilde"
+msgstr "In the pill after Claude finishes"
+
+#: ui/pages.slint
+msgid "Bilgisayar sağlığı"
+msgstr "PC health"
+
+#: ui/pages.slint
+msgid "Sorun olunca göster"
+msgstr "Show when in trouble"
+
+#: ui/pages.slint
+msgid "İşlemci, bellek ya da C: sınırı aşınca"
+msgstr "CPU, memory or C: past its limit"
+
+#: ui/pages.slint
+msgid "İşlemci"
+msgstr "CPU"
+
+#: ui/pages.slint
+msgid "Bellek"
+msgstr "Memory"
+
+#: ui/pages.slint
+msgid "C: boş yer"
+msgstr "C: free space"
+
+#: ui/pages.slint
+msgid "Altına inince"
+msgstr "When below"
+
+#: ui/pages.slint
+msgid "Ne kadar sürerse"
+msgstr "Lasting at least"
+
+#: ui/pages.slint
+msgid "Kısa sıçramalar sayılmaz"
+msgstr "Short spikes don't count"
+
+#: ui/pages.slint
+msgid "Kontrol sıklığı"
+msgstr "Check every"
+
+#: ui/pages.slint
+msgid "Geliştirme sunucuları"
+msgstr "Dev servers"
+
+#: ui/pages.slint
+msgid "Düşünce göster"
+msgstr "Show when one goes down"
+
+#: ui/pages.slint
+msgid "Durunca ve geri gelince"
+msgstr "When it stops and comes back"
+
+#: ui/pages.slint
+msgid "Portlar"
+msgstr "Ports"
+
+#: ui/pages.slint
+msgid "Ad:port, virgülle"
+msgstr "name:port, comma-separated"
+
+#: ui/pages.slint
+msgid "Docker kapsayıcıları"
+msgstr "Docker containers"
+
+#: ui/pages.slint
+msgid "Yalnızca adında"
+msgstr "Only names containing"
+
+#: ui/pages.slint
+msgid "Boş: hepsi"
+msgstr "Empty: all"

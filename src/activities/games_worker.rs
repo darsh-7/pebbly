@@ -528,6 +528,12 @@ pub fn start(mailbox: GamesMailbox, post: fn()) {
         });
         let mut posted: Option<Vec<GameNow>> = None;
         loop {
+            // Both stores off (or Pebbly off): no scanning at all, only a slow look at the settings.
+            let s = crate::settings::current();
+            if !s.enabled || !(s.games_steam || s.games_epic) {
+                std::thread::sleep(std::time::Duration::from_millis(QUIET_MS as u64));
+                continue;
+            }
             let (now, done) = scanner.look();
             let (now, events) = scanner.tracker.update(now, &done, unix_now());
             for e in &events {

@@ -7,6 +7,9 @@ use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// The alert sounds on offer (C:\Windows\Media\<name>.wav), soft ones first.
+pub const SOUND_NAMES: [&str; 5] = ["Windows Notify Calendar", "Windows Notify Messaging", "Windows Notify System Generic", "chimes", "ding"];
+
 /// Registered window message the settings window posts after saving.
 pub const SETTINGS_CHANGED: &str = "Pebbly.SettingsChanged";
 
@@ -26,6 +29,15 @@ pub enum Hotkey {
 pub enum QuestionHotkey {
     WinAltC,
     WinShiftC,
+    Off,
+}
+
+/// The shortcuts that step through the stack (← →) and jump to the latest alert (↑).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SwitchHotkey {
+    WinAltArrows,
+    CtrlAltArrows,
     Off,
 }
 
@@ -180,6 +192,42 @@ pub struct Settings {
     pub match_enabled: bool,
     pub wheel_switches_activity: bool,
     pub keep_user_front: bool,
+    // Uyarılar
+    /// Something new (a Claude session, a server going down...) comes to the front for
+    /// `alert_pop_s`, then the user's pick is back.
+    pub alert_pop: bool,
+    pub alert_pop_s: u32,
+    /// A song starting or resuming pops too (off: music changes often).
+    pub alert_pop_media: bool,
+    /// A soft sound when something needs the user (Claude asks, a server or the PC is in trouble).
+    pub alert_sound: bool,
+    /// One of Windows' sounds (C:\Windows\Media\<name>.wav).
+    pub alert_sound_name: String,
+    /// ...and when a Claude session finishes.
+    pub alert_sound_done: bool,
+    /// ...even while a fullscreen app is in front.
+    pub alert_sound_fullscreen: bool,
+    pub switch_hotkey: SwitchHotkey,
+    /// A finished Claude session or script stays this long (3–120 s).
+    pub live_done_keep_s: u32,
+    // Bilgisayar sağlığı
+    /// CPU, memory or C: past their limits for `health_for_s` show (and pop) until they recover.
+    pub health_on: bool,
+    pub health_cpu_pct: u8,
+    pub health_ram_pct: u8,
+    /// C: with less than this free (GB).
+    pub health_disk_gb: u32,
+    pub health_for_s: u32,
+    pub health_every_s: u32,
+    // Geliştirme sunucuları
+    /// Watches localhost ports and Docker containers; one going down shows (and pops) until it's back.
+    pub dev_on: bool,
+    /// "api:3000, web:5173" or just "3000, 5173".
+    pub dev_ports: String,
+    pub dev_docker: bool,
+    /// Only containers whose name holds this (empty: all).
+    pub dev_docker_filter: String,
+    pub dev_every_s: u32,
     // Medya
     pub media_hidden_apps: Vec<String>,
     /// 0 = paused media stays until the player closes.
@@ -341,6 +389,26 @@ impl Default for Settings {
             match_enabled: true,
             wheel_switches_activity: true,
             keep_user_front: true,
+            alert_pop: true,
+            alert_pop_s: 5,
+            alert_pop_media: false,
+            alert_sound: true,
+            alert_sound_name: "Windows Notify Calendar".into(),
+            alert_sound_done: false,
+            alert_sound_fullscreen: false,
+            switch_hotkey: SwitchHotkey::WinAltArrows,
+            live_done_keep_s: 5,
+            health_on: true,
+            health_cpu_pct: 90,
+            health_ram_pct: 90,
+            health_disk_gb: 10,
+            health_for_s: 30,
+            health_every_s: 5,
+            dev_on: true,
+            dev_ports: String::new(),
+            dev_docker: true,
+            dev_docker_filter: String::new(),
+            dev_every_s: 15,
             media_hidden_apps: Vec::new(),
             media_paused_keep_min: 10,
             media_middle_click: true,
@@ -419,6 +487,19 @@ impl Settings {
         self.card_leave_close_ms = self.card_leave_close_ms.clamp(200, 3000);
         self.claude_ask_wait_s = self.claude_ask_wait_s.clamp(10, 300);
         self.pill_offset_dip = self.pill_offset_dip.clamp(-1600, 1600);
+        self.alert_pop_s = self.alert_pop_s.clamp(2, 30);
+        if !SOUND_NAMES.contains(&self.alert_sound_name.as_str()) {
+            self.alert_sound_name = Settings::default().alert_sound_name;
+        }
+        self.live_done_keep_s = self.live_done_keep_s.clamp(3, 120);
+        self.health_cpu_pct = self.health_cpu_pct.clamp(50, 100);
+        self.health_ram_pct = self.health_ram_pct.clamp(50, 100);
+        self.health_disk_gb = self.health_disk_gb.clamp(1, 500);
+        self.health_for_s = self.health_for_s.clamp(5, 600);
+        self.health_every_s = self.health_every_s.clamp(2, 60);
+        self.dev_ports = self.dev_ports.chars().take(300).collect();
+        self.dev_docker_filter = self.dev_docker_filter.trim().chars().take(40).collect();
+        self.dev_every_s = self.dev_every_s.clamp(10, 300);
         self.pill_opacity_pct = self.pill_opacity_pct.clamp(70, 100);
         self.material_darkness_pct = self.material_darkness_pct.clamp(10, 60);
         self.material_saturation_pct = self.material_saturation_pct.clamp(100, 250);

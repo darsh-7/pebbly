@@ -110,6 +110,31 @@ export global Store {
     in-out property <float> leave-ms: 600;
     in-out property <bool> wheel-switches: true;
     in-out property <bool> keep-user-front: true;
+    // Uyarılar
+    in-out property <bool> alert-pop: true;
+    in-out property <float> alert-pop-s: 5;
+    in-out property <bool> alert-pop-media: false;
+    in-out property <bool> alert-sound: true;
+    /// An index into settings::SOUND_NAMES.
+    in-out property <int> alert-sound-name: 0;
+    in-out property <bool> alert-sound-done: false;
+    in-out property <bool> alert-sound-fullscreen: false;
+    /// 0 Win+Alt+arrows, 1 Ctrl+Alt+arrows, 2 off.
+    in-out property <int> switch-hotkey: 0;
+    in-out property <float> live-done-keep: 5;
+    // Bilgisayar sağlığı
+    in-out property <bool> health-on: true;
+    in-out property <float> health-cpu: 90;
+    in-out property <float> health-ram: 90;
+    in-out property <float> health-disk: 10;
+    in-out property <float> health-for: 30;
+    in-out property <float> health-every: 5;
+    // Geliştirme sunucuları
+    in-out property <bool> dev-on: true;
+    in-out property <string> dev-ports;
+    in-out property <bool> dev-docker: true;
+    in-out property <string> dev-docker-filter;
+    in-out property <float> dev-every: 15;
     /// 0 system, 1 dark, 2 light.
     in-out property <int> theme: 0;
     // Medya
