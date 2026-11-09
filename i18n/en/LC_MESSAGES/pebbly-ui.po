@@ -3796,7 +3796,7 @@ msgstr "Switch activities"
 
 #: ui/pages.slint
 msgid "← → gezer, ↑ son uyarı"
-msgstr "← → step, ↑ latest alert"
+msgstr "↑ latest alert"
 
 #: ui/pages.slint
 msgid "Uyarılar"
@@ -3864,7 +3864,7 @@ msgstr "Keep finished"
 
 #: ui/pages.slint
 msgid "Claude bitince pilde"
-msgstr "In the pill after Claude finishes"
+msgstr "After it ends"
 
 #: ui/pages.slint
 msgid "Bilgisayar sağlığı"
@@ -3900,7 +3900,7 @@ msgstr "Lasting at least"
 
 #: ui/pages.slint
 msgid "Kısa sıçramalar sayılmaz"
-msgstr "Short spikes don't count"
+msgstr "Spikes ignored"
 
 #: ui/pages.slint
 msgid "Kontrol sıklığı"
@@ -3924,7 +3924,7 @@ msgstr "Ports"
 
 #: ui/pages.slint
 msgid "Ad:port, virgülle"
-msgstr "name:port, comma-separated"
+msgstr "comma-separated"
 
 #: ui/pages.slint
 msgid "Docker kapsayıcıları"
@@ -3932,7 +3932,7 @@ msgstr "Docker containers"
 
 #: ui/pages.slint
 msgid "Yalnızca adında"
-msgstr "Only names containing"
+msgstr "Name contains"
 
 #: ui/pages.slint
 msgid "Boş: hepsi"
