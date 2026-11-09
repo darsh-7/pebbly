@@ -2,6 +2,7 @@
 
 pub mod activities;
 pub mod app;
+pub mod agy_hooks;
 pub mod claude_hooks;
 pub mod i18n;
 pub mod legacy;

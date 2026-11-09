@@ -219,15 +219,14 @@ pub struct Settings {
     pub health_disk_gb: u32,
     pub health_for_s: u32,
     pub health_every_s: u32,
-    // Geliştirme sunucuları
-    /// Watches localhost ports and Docker containers; one going down shows (and pops) until it's back.
-    pub dev_on: bool,
-    /// "api:3000, web:5173" or just "3000, 5173".
-    pub dev_ports: String,
-    pub dev_docker: bool,
-    /// Only containers whose name holds this (empty: all).
-    pub dev_docker_filter: String,
-    pub dev_every_s: u32,
+    /// Now and then the PC's numbers (CPU, memory, C:, uptime) show for a few seconds.
+    pub info_glance_on: bool,
+    pub info_glance_every_min: u32,
+    pub info_glance_s: u32,
+    // Yapay zekâ ajanları
+    /// Antigravity's agents show like Claude Code's sessions (Pebbly's hooks in
+    /// ~/.gemini/config/hooks.json while on).
+    pub agy_on: bool,
     // Medya
     pub media_hidden_apps: Vec<String>,
     /// 0 = paused media stays until the player closes.
@@ -404,11 +403,10 @@ impl Default for Settings {
             health_disk_gb: 10,
             health_for_s: 30,
             health_every_s: 5,
-            dev_on: true,
-            dev_ports: String::new(),
-            dev_docker: true,
-            dev_docker_filter: String::new(),
-            dev_every_s: 15,
+            info_glance_on: true,
+            info_glance_every_min: 30,
+            info_glance_s: 8,
+            agy_on: true,
             media_hidden_apps: Vec::new(),
             media_paused_keep_min: 10,
             media_middle_click: true,
@@ -497,9 +495,8 @@ impl Settings {
         self.health_disk_gb = self.health_disk_gb.clamp(1, 500);
         self.health_for_s = self.health_for_s.clamp(5, 600);
         self.health_every_s = self.health_every_s.clamp(2, 60);
-        self.dev_ports = self.dev_ports.chars().take(300).collect();
-        self.dev_docker_filter = self.dev_docker_filter.trim().chars().take(40).collect();
-        self.dev_every_s = self.dev_every_s.clamp(10, 300);
+        self.info_glance_every_min = self.info_glance_every_min.clamp(5, 240);
+        self.info_glance_s = self.info_glance_s.clamp(3, 30);
         self.pill_opacity_pct = self.pill_opacity_pct.clamp(70, 100);
         self.material_darkness_pct = self.material_darkness_pct.clamp(10, 60);
         self.material_saturation_pct = self.material_saturation_pct.clamp(100, 250);

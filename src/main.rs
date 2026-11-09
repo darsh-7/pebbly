@@ -108,6 +108,10 @@ fn forward(args: &[String]) -> bool {
             claude_hook(args.iter().any(|a| a == "--ask"));
             return true;
         }
+        Some("agy-hook") => {
+            agy_hook(args.get(2).map(String::as_str).unwrap_or(""));
+            return true;
+        }
         Some("update") => Some(Command::Update),
         Some("claude-hooks") => {
             claude_hooks_command(args.get(2).map(String::as_str));
@@ -192,6 +196,18 @@ fn claude_hook(asks: bool) {
                 ipc::send(&Command::AskGone { id });
             }
         }
+    }
+}
+
+/// One Antigravity hook call (its .cmd prints Antigravity's answer): the JSON on stdin, the
+/// event from the command line.
+fn agy_hook(event: &str) {
+    use std::io::Read;
+    let mut text = String::new();
+    let _ = std::io::stdin().take(1 << 20).read_to_string(&mut text);
+    let Ok(hook) = serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')) else { return };
+    if let Some(msg) = pebbly::activities::live::agy_msg(event, &hook) {
+        ipc::send(&ipc::fitted(Command::Live(Box::new(msg))));
     }
 }
 

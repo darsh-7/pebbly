@@ -3937,3 +3937,183 @@ msgstr "Name contains"
 #: ui/pages.slint
 msgid "Boş: hepsi"
 msgstr "Empty: all"
+
+#: src/settings_ui.rs
+msgid "Yapay zekâ"
+msgstr "AI agents"
+
+#: src/settings_ui.rs
+msgid "Bilgisayar"
+msgstr "PC"
+
+#: src/settings_ui.rs
+msgid "Yeni bir Claude oturumu, bir uyarı ya da bildirim birkaç saniye öne gelir, sonra seçtiğine döner"
+msgstr "A new Claude session, alert or notification comes to the front for a few seconds, then your pick is back"
+
+#: src/settings_ui.rs
+msgid "Yeni olanın önde kaldığı saniye"
+msgstr "How long something new stays in front"
+
+#: src/settings_ui.rs
+msgid "Bir şarkı başlayınca da öne gelir"
+msgstr "Also pops up when a song starts"
+
+#: src/settings_ui.rs
+msgid "Claude seni bekleyince ya da bilgisayar sorun çıkarınca yumuşak bir ses"
+msgstr "A soft sound when Claude needs you or the PC has trouble"
+
+#: src/settings_ui.rs
+msgid "Bir ajan işini bitirince de ses"
+msgstr "Also a sound when an agent finishes"
+
+#: src/settings_ui.rs
+msgid "Ok tuşlarıyla etkinlikler arasında gez, yukarı ok son uyarıyı getirir"
+msgstr "Step through activities with the arrow keys; up brings the latest alert"
+
+#: src/settings_ui.rs
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/settings_ui.rs
+msgid "Antigravity ajanları"
+msgstr "Antigravity agents"
+
+#: src/settings_ui.rs
+msgid "Antigravity'nin ajanları Claude Code gibi pilde: adım, dosya, bitince"
+msgstr "Antigravity's agents in the pill like Claude Code: step, file, when done"
+
+#: src/settings_ui.rs
+msgid "Claude Code"
+msgstr "Claude Code"
+
+#: src/settings_ui.rs
+msgid "Biten bir oturum pilde bu kadar kalır"
+msgstr "A finished session stays in the pill this long"
+
+#: src/settings_ui.rs
+msgid "İşlemci ya da bellek uzun süre yüksek kalınca, C: dolunca pil öne gelir"
+msgstr "The pill comes forward when CPU or memory stay high, or C: fills up"
+
+#: src/settings_ui.rs
+msgid "Genel bilgi"
+msgstr "General info"
+
+#: src/settings_ui.rs
+msgid "Arada bir göster"
+msgstr "Show now and then"
+
+#: src/settings_ui.rs
+msgid "Arada bir işlemci, bellek, boş yer ve açık kalma süresi birkaç saniye pilde"
+msgstr "Now and then CPU, memory, free space and uptime show in the pill for a few seconds"
+
+#: src/activities/watch.rs
+msgid "{} gün {} sa"
+msgstr "{} d {} h"
+
+#: src/activities/watch.rs
+msgid "CPU %{}"
+msgstr "CPU {}%"
+
+#: ui/pages.slint
+msgid "Yeni bir şey olunca"
+msgstr "When something new happens"
+
+#: ui/pages.slint
+msgid "tıkla: aç / kapat"
+msgstr "click: on / off"
+
+#: ui/pages.slint
+msgid "Öne gelir"
+msgstr "Pops up"
+
+#: ui/pages.slint
+msgid "sonra seçtiğine döner"
+msgstr "then back to your pick"
+
+#: ui/pages.slint
+msgid "Claude seni bekleyince, bilgisayar sorun çıkarınca"
+msgstr "when Claude needs you, or the PC has trouble"
+
+#: ui/pages.slint
+msgid "Önceki / sonraki"
+msgstr "Previous / next"
+
+#: ui/pages.slint
+msgid "yığında gez"
+msgstr "step through the stack"
+
+#: ui/pages.slint
+msgid "Son uyarı"
+msgstr "Latest alert"
+
+#: ui/pages.slint
+msgid "son değişeni öne getirir"
+msgstr "brings what changed last to the front"
+
+#: ui/pages.slint
+msgid "Öne gelme"
+msgstr "Pop-ups"
+
+#: ui/pages.slint
+msgid "Seni bekleyen bir şey olunca"
+msgstr "When something needs you"
+
+#: ui/pages.slint
+msgid "Ajan bitirince de"
+msgstr "Also when an agent finishes"
+
+#: ui/pages.slint
+msgid "Claude Code ya da Antigravity"
+msgstr "Claude Code or Antigravity"
+
+#: ui/pages.slint
+msgid "↑ son uyarı"
+msgstr "↑ latest alert"
+
+#: ui/pages.slint
+msgid "Ajanlar"
+msgstr "Agents"
+
+#: ui/pages.slint
+msgid "adım, görevler, izin kartı"
+msgstr "step, tasks, permission card"
+
+#: ui/pages.slint
+msgid "adım, dosya, bitince"
+msgstr "step, file, when done"
+
+#: ui/pages.slint
+msgid "bu bilgisayarda kullanılmamış"
+msgstr "not used on this PC"
+
+#: ui/pages.slint
+msgid "Bir ajan çalışırken pilde ne yaptığı görünür; seni bekleyince ya da bitince öne gelir."
+msgstr "While an agent works, the pill shows what it's doing; it comes forward when it needs you or finishes."
+
+#: ui/pages.slint
+msgid "Bitince pilde"
+msgstr "In the pill when done"
+
+#: ui/pages.slint
+msgid "Hook'ları Pebbly kurar"
+msgstr "Pebbly sets up its hooks"
+
+#: ui/pages.slint
+msgid "Bu bilgisayarda kullanılmamış"
+msgstr "Not used on this PC"
+
+#: ui/pages.slint
+msgid "Sağlık uyarıları"
+msgstr "Health alerts"
+
+#: ui/pages.slint
+msgid "İşlemci, bellek, boş yer, açık kalma"
+msgstr "CPU, memory, free space, uptime"
+
+#: ui/pages.slint
+msgid "Ne sıklıkla"
+msgstr "How often"
+
+#: ui/pages.slint
+msgid "Pilde kalma"
+msgstr "Time in the pill"

@@ -114,7 +114,8 @@ pub struct Presence {
 }
 
 /// The settings window's page for an activity (a right-click on its pill opens it):
-/// 2 Medya, 3 Zamanlayıcı, 4 Galaxy Buds, 5 Canlı maç, 8 Sistem, 9 Oyunlar, 10 Dijital Denge.
+/// 2 Medya, 3 Zamanlayıcı, 4 Galaxy Buds, 5 Canlı maç, 8 Sistem, 9 Oyunlar, 10 Dijital Denge,
+/// 12 Yapay zekâ (Claude Code, Antigravity, scripts and apps).
 pub fn settings_page_for(kind: ActivityKind) -> u8 {
     match kind {
         ActivityKind::Media(_) => 2,
@@ -132,8 +133,8 @@ pub fn settings_page_for(kind: ActivityKind) -> u8 {
         | ActivityKind::WeatherAlert
         | ActivityKind::Capture
         | ActivityKind::Away
-        | ActivityKind::Transfer
-        | ActivityKind::Live(_) => 8,
+        | ActivityKind::Transfer => 8,
+        ActivityKind::Live(_) => 12,
         ActivityKind::Game(_) => 9,
         ActivityKind::Usage => 10,
     }
@@ -376,7 +377,7 @@ mod tests {
         assert_eq!(stack_order(&done, 5_900, picked).first(), Some(&Live(7)));
         assert!(!stack_order(&done, 1_000 + LIVE_DONE_MS + 1, picked).contains(&Live(7)));
         assert!(has_card(Live(7)));
-        assert_eq!(settings_page_for(Live(7)), 8);
+        assert_eq!(settings_page_for(Live(7)), 12);
     }
 
     #[test]

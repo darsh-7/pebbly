@@ -888,6 +888,7 @@ impl App {
             log(&format!("a switch shortcut is taken by another app: {e:?}"));
         }
         crate::activities::watch::follow_settings();
+        crate::agy_hooks::follow_settings();
         // Transparency effects on/off (also flips with Energy Saver); raised on a worker thread.
         let ui_settings = UISettings::new().ok();
         if let Some(settings) = &ui_settings {
@@ -3166,7 +3167,7 @@ impl App {
             status: pill_status(i, now),
             claude: i.claude,
             state: i.state,
-            action: match (i.claude, i.state, i.info.steps.first()) {
+            action: match (i.agent(), i.state, i.info.steps.first()) {
                 (true, LiveState::Run, Some(step)) => step_label(step),
                 (true, LiveState::Wait, _) => i.info.ask.as_ref().map(|a| a.detail.clone()).unwrap_or_default(),
                 _ => String::new(),
@@ -3189,7 +3190,7 @@ impl App {
         for c in crate::platform::ipc::take() {
             match c {
                 // The API's ids are the apps' own.
-                crate::platform::ipc::Command::Live(m) if settings::current().live_enabled && push_id_ok(&m.id) => self.live.apply(*m, now),
+                crate::platform::ipc::Command::Live(m) if settings::current().live_enabled && push_id_ok(&m.id) && (settings::current().agy_on || !m.id.starts_with("agy:")) => self.live.apply(*m, now),
                 crate::platform::ipc::Command::Live(_) => {}
                 crate::platform::ipc::Command::Update => self.updater.apply(),
                 crate::platform::ipc::Command::AskGone { id } => self.live.drop_ask(&id),
@@ -3211,7 +3212,7 @@ impl App {
         }
         let news = self.live.items().iter().any(|i| {
             let was = before.iter().find(|(k, _)| *k == i.key).map(|(_, st)| *st);
-            was != Some(i.state) && (i.state == LiveState::Wait || (i.state == LiveState::Done && i.claude && s.alert_sound_done))
+            was != Some(i.state) && (i.state == LiveState::Wait || (i.state == LiveState::Done && i.agent() && s.alert_sound_done))
         });
         if news {
             play_windows_sound(&s.alert_sound_name);
@@ -3306,6 +3307,9 @@ impl App {
             }
         }
         crate::activities::watch::follow_settings();
+        if (new.agy_on, new.live_enabled, new.enabled) != (old.agy_on, old.live_enabled, old.enabled) {
+            crate::agy_hooks::follow_settings();
+        }
         if new.accent_from_wallpaper && !old.accent_from_wallpaper {
             self.check_wallpaper();
         }

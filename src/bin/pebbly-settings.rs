@@ -464,11 +464,11 @@ fn fill(ui: &SettingsWindow, s: &Settings, live_apps: &[String]) {
     st.set_health_disk(s.health_disk_gb as f32);
     st.set_health_for(s.health_for_s as f32);
     st.set_health_every(s.health_every_s as f32);
-    st.set_dev_on(s.dev_on);
-    st.set_dev_ports(s.dev_ports.clone().into());
-    st.set_dev_docker(s.dev_docker);
-    st.set_dev_docker_filter(s.dev_docker_filter.clone().into());
-    st.set_dev_every(s.dev_every_s as f32);
+    st.set_info_glance_on(s.info_glance_on);
+    st.set_info_glance_every(s.info_glance_every_min as f32);
+    st.set_info_glance_s(s.info_glance_s as f32);
+    st.set_agy_on(s.agy_on);
+    st.set_agy_installed(pebbly::agy_hooks::config_dir().is_some_and(|d| d.exists()));
     st.set_theme(index_of(&[Look::System, Look::Dark, Look::Light], &s.settings_theme, 0));
     st.set_media_on(s.media_enabled);
     st.set_pill_buttons(index_of(&[PillButtons::All, PillButtons::Play, PillButtons::None], &s.media_pill_buttons, 0));
@@ -599,11 +599,10 @@ fn read(ui: &SettingsWindow, base: &Settings) -> Settings {
         health_disk_gb: st.get_health_disk().round() as u32,
         health_for_s: st.get_health_for().round() as u32,
         health_every_s: st.get_health_every().round() as u32,
-        dev_on: st.get_dev_on(),
-        dev_ports: st.get_dev_ports().to_string(),
-        dev_docker: st.get_dev_docker(),
-        dev_docker_filter: st.get_dev_docker_filter().trim().to_string(),
-        dev_every_s: st.get_dev_every().round() as u32,
+        info_glance_on: st.get_info_glance_on(),
+        info_glance_every_min: st.get_info_glance_every().round() as u32,
+        info_glance_s: st.get_info_glance_s().round() as u32,
+        agy_on: st.get_agy_on(),
         settings_theme: pick(&[Look::System, Look::Dark, Look::Light], st.get_theme(), Look::System),
         media_enabled: st.get_media_on(),
         media_pill_buttons: pick(&[PillButtons::All, PillButtons::Play, PillButtons::None], st.get_pill_buttons(), PillButtons::All),

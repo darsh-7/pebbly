@@ -7,7 +7,7 @@ use crate::i18n::{n_, tr, trf};
 use crate::settings::BudsDevice;
 
 /// Sidebar order; `SearchHit::page` and the window's `Store.page` index this.
-pub const PAGES: [&str; 11] = [n_("Görünüm"), n_("Genel"), n_("Medya"), n_("Zamanlayıcı"), n_("Galaxy Buds"), n_("Canlı maç"), n_("Tam ekran"), n_("Hakkında"), n_("Sistem"), n_("Oyunlar"), n_("Dijital Denge")];
+pub const PAGES: [&str; 14] = [n_("Görünüm"), n_("Genel"), n_("Medya"), n_("Zamanlayıcı"), n_("Galaxy Buds"), n_("Canlı maç"), n_("Tam ekran"), n_("Hakkında"), n_("Sistem"), n_("Oyunlar"), n_("Dijital Denge"), n_("Uyarılar"), n_("Yapay zekâ"), n_("Bilgisayar")];
 
 /// One searchable row: page, row key (the window scrolls to it), section, title, description,
 /// extra words people might type.
@@ -93,12 +93,12 @@ pub const INDEX: &[Entry] = &[
     e(8, "power-moment", n_("Şarj"), n_("Şarjı göster"), n_("Şarj aleti takılınca ve pil azalınca pil kısa bir an öne gelir"), "şarj pil batarya güç adaptör priz dizüstü laptop"),
     e(8, "power-low", n_("Şarj"), n_("Düşük pil"), n_("Dizüstünün pili bunun altına inince bir kez uyarır"), "düşük pil batarya uyarı yüzde"),
     e(8, "privacy-on", n_("Mikrofon / kamera"), n_("Mikrofon ve kamera kullanımı"), n_("Bir uygulama mikrofonu ya da kamerayı kullanırken pilde, uygulamanın adıyla"), "mikrofon kamera gizlilik webcam kayıt discord zoom"),
-    e(8, "live-on", n_("Canlı etkinlikler"), n_("Canlı etkinlikler"), n_("pebbly.exe push ve Claude Code'un hook'ları pilde bir etkinlik gösterir"), "claude betik script canlı etkinlik hook push derleme"),
+    e(12, "live-on", n_("Canlı etkinlikler"), n_("Canlı etkinlikler"), n_("pebbly.exe push ve Claude Code'un hook'ları pilde bir etkinlik gösterir"), "claude betik script canlı etkinlik hook push derleme"),
     e(8, "capture-moment", n_("Ekran görüntüleri"), n_("Ekran görüntüsünü göster"), n_("ShareX ya da Ekran Alıntısı Aracı yeni bir görüntü kaydedince pilde kısa bir an; sürükleyip atabilirsin"), "ekran görüntüsü screenshot sharex alıntı snipping kırpma yakalama"),
     e(8, "transfer-on", n_("Dosya kopyalama"), n_("Kopyalama ilerlemesi"), n_("Explorer kopyalar, taşır ya da silerken pilde yüzde ve kalan süre; penceresi küçültülse de"), "kopyala kopyalama taşı sil dosya ilerleme explorer gezgin yüzde kalan süre copy"),
     e(8, "capture-to-shelf", n_("Ekran görüntüleri"), n_("Ekran görüntülerini rafa ekle"), n_("Yeni görüntüler rafa düşer, sonra sürükleyip atmak için"), "ekran görüntüsü raf shelf sharex screenshot"),
-    e(8, "claude-ask", n_("Canlı etkinlikler"), n_("Claude izinleri"), n_("Claude izin isteyince kartında İzin ver / Reddet çıkar"), "claude izin onay reddet permission hook"),
-    e(8, "claude-ask-wait", n_("Canlı etkinlikler"), n_("İzin için bekleme"), n_("Kart bu kadar cevap bekler, sonra Claude kendi penceresinde sorar"), "claude izin bekleme süre saniye zaman aşımı"),
+    e(12, "claude-ask", n_("Canlı etkinlikler"), n_("Claude izinleri"), n_("Claude izin isteyince kartında İzin ver / Reddet çıkar"), "claude izin onay reddet permission hook"),
+    e(12, "claude-ask-wait", n_("Canlı etkinlikler"), n_("İzin için bekleme"), n_("Kart bu kadar cevap bekler, sonra Claude kendi penceresinde sorar"), "claude izin bekleme süre saniye zaman aşımı"),
     e(8, "api-on", n_("Uygulama bildirimleri"), n_("Uygulama bildirimleri"), n_("Diğer uygulamalar 127.0.0.1:20034 üzerinden pilde bildirim gösterebilir; önce sana sorulur"), "api bildirim uygulama izni notification http localhost 20034 geliştirici developer docs"),
     e(8, "api-apps", n_("Uygulama bildirimleri"), n_("İzin verilen uygulamalar"), n_("Sorduklarında verdiğin cevaplar; tıkla: izin ver / engelle"), "api uygulama izin engelle sustur liste"),
     e(8, "headsets-on", n_("Diğer kulaklıklar"), n_("Diğer kulaklıkları göster"), n_("Galaxy Buds dışındaki Bluetooth kulaklıklar, pilleriyle"), "kulaklık bluetooth pil sony airpods jbl"),
@@ -121,6 +121,16 @@ pub const INDEX: &[Entry] = &[
     e(10, "music-week", n_("Müzik"), n_("Haftanın müziği"), n_("En çok dinlenen şarkılar ve sanatçılar; çalanlar bu bilgisayarda sayılır, internete gitmez"), "müzik şarkı sanatçı haftalık özet wrapped spotify en çok dinlenen"),
     e(8, "weather-locate", n_("Saat ve hava"), n_("Konumumu kullan"), n_("Şehir seçilmemişse hava bilgisayarın bulunduğu yerin; konum Windows'tan, yer adı OpenStreetMap'ten"), "konum otomatik yer neredeyim gps location"),
     e(8, "weather-city", n_("Saat ve hava"), n_("Hava için şehir"), n_("Sıcaklık ve gökyüzü bu şehrin; veriler Open-Meteo'dan gelir"), "şehir il konum hava durumu sıcaklık derece weather"),
+    e(11, "alert-pop", n_("Uyarılar"), n_("Yeni olan öne gelsin"), n_("Yeni bir Claude oturumu, bir uyarı ya da bildirim birkaç saniye öne gelir, sonra seçtiğine döner"), "uyarı bildirim öne gel pop açılır yeni olay alert"),
+    e(11, "alert-pop-s", n_("Uyarılar"), n_("Önde kalma"), n_("Yeni olanın önde kaldığı saniye"), "süre saniye uyarı"),
+    e(11, "alert-pop-media", n_("Uyarılar"), n_("Müzik de öne gelsin"), n_("Bir şarkı başlayınca da öne gelir"), "müzik şarkı medya uyarı"),
+    e(11, "alert-sound", n_("Uyarılar"), n_("Uyarı sesi"), n_("Claude seni bekleyince ya da bilgisayar sorun çıkarınca yumuşak bir ses"), "ses uyarı sound çal bildirim sesi"),
+    e(11, "alert-sound-done", n_("Uyarılar"), n_("Claude bitirince de"), n_("Bir ajan işini bitirince de ses"), "ses bitti claude antigravity"),
+    e(11, "switch-hotkey", n_("Kısayollar"), n_("Etkinlikler arası geç"), n_("Ok tuşlarıyla etkinlikler arasında gez, yukarı ok son uyarıyı getirir"), "kısayol ok tuş geç değiştir switch hotkey"),
+    e(12, "agy-on", n_("Antigravity"), n_("Antigravity ajanları"), n_("Antigravity'nin ajanları Claude Code gibi pilde: adım, dosya, bitince"), "antigravity google gemini ajan agent ide yapay zeka"),
+    e(12, "live-done-keep", n_("Claude Code"), n_("Biten kalsın"), n_("Biten bir oturum pilde bu kadar kalır"), "bitti süre claude kalsın"),
+    e(13, "health-on", n_("Bilgisayar sağlığı"), n_("Sorun olunca göster"), n_("İşlemci ya da bellek uzun süre yüksek kalınca, C: dolunca pil öne gelir"), "işlemci cpu bellek ram disk c: dolu yavaş sağlık"),
+    e(13, "info-glance-on", n_("Genel bilgi"), n_("Arada bir göster"), n_("Arada bir işlemci, bellek, boş yer ve açık kalma süresi birkaç saniye pilde"), "genel bilgi özet istatistik cpu ram uptime ara sıra"),
 ];
 
 /// Lower case without Turkish marks, one character for one (so match positions carry over):
@@ -400,7 +410,7 @@ mod tests {
         assert!(rows("tam ekran", 9).contains(&"island-on"), "{:?}", rows("tam ekran", 9));
         assert!(rows("ekran süresi", 10).contains(&"wellbeing-on"), "{:?}", rows("ekran süresi", 10));
         assert!(rows("sınır", 10).contains(&"wellbeing-limits"), "{:?}", rows("sınır", 10));
-        assert_eq!(LAST_PAGE, 10);
+        assert_eq!(LAST_PAGE, 13);
     }
 
     #[test]
@@ -427,8 +437,9 @@ mod tests {
         assert!(rows("mikrofon", 8).contains(&"privacy-on"), "{:?}", rows("mikrofon", 8));
         assert!(rows("kamera", 8).contains(&"privacy-on"), "{:?}", rows("kamera", 8));
         assert!(rows("kulaklık", 8).contains(&"headsets-on"), "{:?}", rows("kulaklık", 8));
-        assert!(rows("claude", 8).contains(&"live-on"), "{:?}", rows("claude", 8));
-        assert!(rows("betik", 8).contains(&"live-on"), "{:?}", rows("betik", 8));
+        assert!(rows("claude", 12).contains(&"live-on"), "{:?}", rows("claude", 12));
+        assert!(rows("betik", 12).contains(&"live-on"), "{:?}", rows("betik", 12));
+        assert!(rows("antigravity", 12).contains(&"agy-on"), "{:?}", rows("antigravity", 12));
         assert!(rows("söz", 2).contains(&"media-lyrics"), "{:?}", rows("söz", 2));
         assert!(rows("dalga", 2).contains(&"media-waveform"), "{:?}", rows("dalga", 2));
         // Every entry's page has a name (the hit's path is "Sistem › Şarj").

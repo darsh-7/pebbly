@@ -129,12 +129,13 @@ export global Store {
     in-out property <float> health-disk: 10;
     in-out property <float> health-for: 30;
     in-out property <float> health-every: 5;
-    // Geliştirme sunucuları
-    in-out property <bool> dev-on: true;
-    in-out property <string> dev-ports;
-    in-out property <bool> dev-docker: true;
-    in-out property <string> dev-docker-filter;
-    in-out property <float> dev-every: 15;
+    in-out property <bool> info-glance-on: true;
+    in-out property <float> info-glance-every: 30;
+    in-out property <float> info-glance-s: 8;
+    // Yapay zekâ ajanları
+    in-out property <bool> agy-on: true;
+    /// ~/.gemini/config is there (Antigravity was used on this PC).
+    in-out property <bool> agy-installed: false;
     /// 0 system, 1 dark, 2 light.
     in-out property <int> theme: 0;
     // Medya

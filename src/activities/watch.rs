@@ -1,10 +1,8 @@
-//! The PC's health (CPU, memory, C:) and the user's dev servers (localhost ports, Docker
-//! containers), watched on one thread. Trouble becomes a live item that waits (it pops, with the
-//! alert sound) until it's over; then it says so for a moment. The thread only runs while one of
-//! the two is on in the settings.
+//! The PC, watched on one thread: its health (CPU, memory, C:) and, now and then, a glance at its
+//! numbers. Trouble becomes a live item that waits (it pops, with the alert sound) until it's
+//! over, then says so for a moment; the glance shows for a few seconds and goes. The thread only
+//! runs while one of the two is on in the settings.
 
-use std::collections::BTreeMap;
-use std::net::{SocketAddr, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -15,13 +13,15 @@ use crate::settings;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
-/// Starts the thread when health or dev watching was turned on (it ends by itself once both are off).
+/// Whether the settings want the thread.
+fn wanted(s: &settings::Settings) -> bool {
+    s.enabled && (s.health_on || s.info_glance_on)
+}
+
+/// Starts the thread when health or the glance was turned on (it ends by itself once both are off).
 pub fn follow_settings() {
-    let s = settings::current();
-    if (s.enabled && (s.health_on || s.dev_on)) && !RUNNING.swap(true, Ordering::SeqCst) {
-        if std::thread::Builder::new().name("watch".into()).spawn(run).is_err() {
-            RUNNING.store(false, Ordering::SeqCst);
-        }
+    if wanted(&settings::current()) && !RUNNING.swap(true, Ordering::SeqCst) && std::thread::Builder::new().name("watch".into()).spawn(run).is_err() {
+        RUNNING.store(false, Ordering::SeqCst);
     }
 }
 
@@ -34,39 +34,51 @@ fn msg(id: &str, title: String, text: String, state: LiveState) -> LiveMsg {
     LiveMsg { id: format!("watch:{id}"), title, text, progress: None, state, claude: None, app: None }
 }
 
+/// The first glance comes this soon after the start, the next ones every `info_glance_every_min`.
+const FIRST_GLANCE: Duration = Duration::from_secs(60);
+
 fn run() {
     log("watch: started");
     let mut health = Health::default();
-    let mut dev = Dev::default();
-    let (mut next_health, mut next_dev) = (Instant::now(), Instant::now());
+    let mut next_health = Instant::now();
+    let mut next_glance = Instant::now() + FIRST_GLANCE;
+    // The glance on screen now: when it goes.
+    let mut glance_until: Option<Instant> = None;
     loop {
         let s = settings::current();
-        if !s.enabled || (!s.health_on && !s.dev_on) {
+        if !wanted(&s) {
             break;
         }
         let now = Instant::now();
-        if s.health_on && now >= next_health {
-            health.poll(&s);
-            next_health = now + Duration::from_secs(s.health_every_s as u64);
-        } else if !s.health_on {
+        if s.health_on {
+            if now >= next_health {
+                health.poll(&s);
+                next_health = now + Duration::from_secs(s.health_every_s as u64);
+            }
+        } else {
             health.clear_all();
         }
-        if s.dev_on && now >= next_dev {
-            dev.poll(&s);
-            next_dev = now + Duration::from_secs(s.dev_every_s as u64);
-        } else if !s.dev_on {
-            dev.clear_all();
+        if glance_until.is_some_and(|until| now >= until) || (glance_until.is_some() && !s.info_glance_on) {
+            send(msg("info", String::new(), String::new(), LiveState::Clear));
+            glance_until = None;
+        }
+        if s.info_glance_on && now >= next_glance {
+            if let Some(text) = health.glance() {
+                send(msg("info", tr("Bilgisayar").into(), text, LiveState::Run));
+                glance_until = Some(now + Duration::from_secs(s.info_glance_s as u64));
+            }
+            next_glance = now + Duration::from_secs(s.info_glance_every_min as u64 * 60);
         }
         // Wakes often enough to follow the settings, sleeps the rest.
         std::thread::sleep(Duration::from_secs(1));
     }
     health.clear_all();
-    dev.clear_all();
+    if glance_until.is_some() {
+        send(msg("info", String::new(), String::new(), LiveState::Clear));
+    }
     RUNNING.store(false, Ordering::SeqCst);
     log("watch: stopped");
 }
-
-// ------------------------------------------------------------------ health
 
 /// One limit, with hysteresis: over it for `for_s` seconds raises, back under `clear` lowers.
 #[derive(Default, Debug)]
@@ -108,6 +120,8 @@ struct Health {
     ram: Limit,
     disk: Limit,
     last_times: Option<(u64, u64)>,
+    /// The last CPU % measured (the glance's, between polls).
+    last_cpu: Option<u8>,
     started: Option<Instant>,
 }
 
@@ -115,18 +129,29 @@ fn filetime(f: windows::Win32::Foundation::FILETIME) -> u64 {
     (f.dwHighDateTime as u64) << 32 | f.dwLowDateTime as u64
 }
 
+/// "3 sa 12 dk", "2 gün 4 sa": how long Windows has been up.
+pub fn uptime_text(ms: u64) -> String {
+    let m = ms / 60_000;
+    match (m / 1440, m % 1440 / 60, m % 60) {
+        (0, 0, m) => trf("{} dk", &[&m]),
+        (0, h, m) => trf("{} sa {} dk", &[&h, &m]),
+        (d, h, _) => trf("{} gün {} sa", &[&d, &h]),
+    }
+}
+
 impl Health {
-    /// CPU % since the last poll (None on the first).
+    /// CPU % since the last call (None on the first).
     fn cpu_pct(&mut self) -> Option<u8> {
         use windows::Win32::Foundation::FILETIME;
         let (mut idle, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default());
         unsafe { windows::Win32::System::Threading::GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)).ok()? };
         // Kernel time includes idle time.
         let (idle, total) = (filetime(idle), filetime(kernel) + filetime(user));
-        let last = self.last_times.replace((idle, total));
-        let (li, lt) = last?;
+        let (li, lt) = self.last_times.replace((idle, total))?;
         let (di, dt) = (idle.saturating_sub(li), total.saturating_sub(lt));
-        (dt > 0).then(|| (100 - (di * 100 / dt).min(100)) as u8)
+        let pct = (dt > 0).then(|| (100 - (di * 100 / dt).min(100)) as u8);
+        self.last_cpu = pct.or(self.last_cpu);
+        pct
     }
 
     fn ram_pct() -> Option<u8> {
@@ -140,6 +165,27 @@ impl Health {
         let mut free = 0u64;
         unsafe { windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(windows::core::w!("C:\\"), Some(&mut free), None, None).ok()? };
         Some(free / (1 << 30))
+    }
+
+    /// "CPU %12 · Bellek %48 · C: 120 GB · 3 sa": the glance's line.
+    fn glance(&mut self) -> Option<String> {
+        // A fresh CPU reading needs two samples: the second a moment after the first.
+        if self.cpu_pct().is_none() {
+            std::thread::sleep(Duration::from_millis(500));
+            self.cpu_pct();
+        }
+        let mut parts = Vec::new();
+        if let Some(cpu) = self.last_cpu {
+            parts.push(trf("CPU %{}", &[&cpu]));
+        }
+        if let Some(ram) = Self::ram_pct() {
+            parts.push(trf("Bellek %{}", &[&ram]));
+        }
+        if let Some(free) = Self::disk_free_gb() {
+            parts.push(format!("C: {free} GB"));
+        }
+        parts.push(uptime_text(unsafe { windows::Win32::System::SystemInformation::GetTickCount64() }));
+        (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
     fn poll(&mut self, s: &settings::Settings) {
@@ -169,7 +215,6 @@ impl Health {
                 send(msg(id, String::new(), String::new(), LiveState::Clear));
             }
         }
-        self.last_times = None;
     }
 }
 
@@ -181,128 +226,6 @@ fn report(id: &str, limit: &Limit, change: Change, title: String, bad: &str, goo
         Change::Same if limit.raised => send(msg(id, title, bad.into(), LiveState::Wait)),
         Change::Same => {}
     }
-}
-
-// ------------------------------------------------------------------ dev servers
-
-/// "api:3000, web:5173, 8080" → [("api", 3000), ("web", 5173), ("8080", 8080)]; junk is skipped.
-pub fn parse_ports(s: &str) -> Vec<(String, u16)> {
-    s.split([',', ';', ' '])
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .filter_map(|p| match p.rsplit_once(':') {
-            Some((name, port)) => port.trim().parse().ok().map(|n| (name.trim().to_string(), n)),
-            None => p.parse().ok().map(|n| (p.to_string(), n)),
-        })
-        .filter(|(_, n)| *n > 0)
-        .take(20)
-        .collect()
-}
-
-/// `docker ps -a --format {{.Names}}|{{.State}}` → name → running.
-pub fn parse_docker(out: &str, filter: &str) -> BTreeMap<String, bool> {
-    let filter = filter.to_lowercase();
-    out.lines()
-        .filter_map(|l| l.trim().split_once('|'))
-        .filter(|(name, _)| filter.is_empty() || name.to_lowercase().contains(&filter))
-        .map(|(name, state)| (name.to_string(), state.trim() == "running"))
-        .take(40)
-        .collect()
-}
-
-/// Up or down, by name; what changed since the last look (the first look only learns).
-#[derive(Default, Debug)]
-pub struct Watched {
-    up: BTreeMap<String, bool>,
-}
-
-impl Watched {
-    /// (name, now up) for each that went down or came back; ones gone from the list are dropped.
-    pub fn update(&mut self, now: BTreeMap<String, bool>) -> Vec<(String, bool)> {
-        let changes = now.iter().filter(|(k, up)| self.up.get(*k).is_some_and(|was| was != *up)).map(|(k, up)| (k.clone(), *up)).collect();
-        self.up = now;
-        changes
-    }
-
-    fn down(&self) -> impl Iterator<Item = &String> {
-        self.up.iter().filter(|(_, up)| !**up).map(|(k, _)| k)
-    }
-}
-
-#[derive(Default)]
-struct Dev {
-    ports: Watched,
-    docker: Watched,
-    /// Docker itself (its daemon) answered last time: None before the first look.
-    docker_ok: Option<bool>,
-}
-
-fn port_open(port: u16) -> bool {
-    TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_millis(300)).is_ok()
-}
-
-fn docker_ps() -> Option<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let out = std::process::Command::new("docker")
-        .args(["ps", "-a", "--format", "{{.Names}}|{{.State}}"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-impl Dev {
-    fn poll(&mut self, s: &settings::Settings) {
-        let ports: BTreeMap<String, bool> = parse_ports(&s.dev_ports).into_iter().map(|(name, n)| (format!("{name} :{n}"), port_open(n))).collect();
-        for (name, up) in self.ports.update(ports) {
-            server("port", &name, up);
-        }
-        if s.dev_docker {
-            match docker_ps() {
-                Some(out) => {
-                    if self.docker_ok == Some(false) {
-                        send(msg("docker", "Docker".into(), tr("Çalışıyor yine").into(), LiveState::Done));
-                    }
-                    self.docker_ok = Some(true);
-                    for (name, up) in self.docker.update(parse_docker(&out, &s.dev_docker_filter)) {
-                        server("ctr", &name, up);
-                    }
-                }
-                None => {
-                    if self.docker_ok == Some(true) {
-                        send(msg("docker", "Docker".into(), tr("Durdu").into(), LiveState::Wait));
-                    }
-                    self.docker_ok = Some(false);
-                }
-            }
-        } else {
-            self.clear_docker();
-        }
-    }
-
-    fn clear_docker(&mut self) {
-        for name in self.docker.down() {
-            send(msg(&format!("ctr:{name}"), String::new(), String::new(), LiveState::Clear));
-        }
-        if self.docker_ok == Some(false) {
-            send(msg("docker", String::new(), String::new(), LiveState::Clear));
-        }
-        (self.docker, self.docker_ok) = (Watched::default(), None);
-    }
-
-    fn clear_all(&mut self) {
-        for name in self.ports.down() {
-            send(msg(&format!("port:{name}"), String::new(), String::new(), LiveState::Clear));
-        }
-        self.ports = Watched::default();
-        self.clear_docker();
-    }
-}
-
-fn server(kind: &str, name: &str, up: bool) {
-    let (text, state) = if up { (tr("Çalışıyor yine"), LiveState::Done) } else { (tr("Durdu"), LiveState::Wait) };
-    send(msg(&format!("{kind}:{name}"), name.to_string(), text.into(), state));
 }
 
 #[cfg(test)]
@@ -320,21 +243,9 @@ mod tests {
     }
 
     #[test]
-    fn ports_and_containers_parse() {
-        assert_eq!(parse_ports("api:3000, web:5173;8080 junk x:0"), vec![("api".into(), 3000), ("web".into(), 5173), ("8080".into(), 8080)]);
-        let ps = "tapi-redis|running\ntapi-minio|exited\nother|running\n";
-        let all = parse_docker(ps, "TAPI");
-        assert_eq!(all.len(), 2);
-        assert_eq!(all.get("tapi-minio"), Some(&false));
-    }
-
-    #[test]
-    fn only_changes_alert_and_the_first_look_learns() {
-        let mut w = Watched::default();
-        let m = |up: bool| BTreeMap::from([("redis".to_string(), up)]);
-        assert!(w.update(m(false)).is_empty(), "down at the first look: learned, not news");
-        assert_eq!(w.update(m(true)), vec![("redis".to_string(), true)]);
-        assert_eq!(w.update(m(false)), vec![("redis".to_string(), false)]);
-        assert!(w.update(m(false)).is_empty());
+    fn uptime_reads_in_minutes_hours_days() {
+        assert_eq!(uptime_text(5 * 60_000), "5 dk");
+        assert_eq!(uptime_text((3 * 60 + 12) * 60_000), "3 sa 12 dk");
+        assert_eq!(uptime_text((2 * 1440 + 4 * 60 + 30) * 60_000), "2 gün 4 sa");
     }
 }

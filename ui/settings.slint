@@ -15,7 +15,8 @@ import { Icon, Toggle, Keycap, IconButton, H4, LRow, SideItem } from "kit.slint"
 import {
     AppearanceBody, AppearanceInspector, GeneralBody, GeneralInspector, MediaBody, MediaInspector, TimerBody, TimerInspector,
     BudsBody, BudsInspector, MatchBody, MatchInspector, FullscreenBody, FullscreenInspector, AboutBody, AboutInspector,
-    SystemBody, SystemInspector, GamesBody, GamesInspector, WellbeingBody, WellbeingInspector
+    SystemBody, SystemInspector, GamesBody, GamesInspector, WellbeingBody, WellbeingInspector,
+    AlertsBody, AlertsInspector, AgentsBody, AgentsInspector, PcBody, PcInspector
 } from "pages.slint";
 
 /// Pebbly's mark: a pill with the accent dot.
@@ -319,7 +320,7 @@ export component SettingsWindow inherits Window {
                         }
                         SideLabel {
                             title: @tr("Etkinlikler");
-                            count: "8";
+                            count: "11";
                         }
                         SideItem {
                             title: @tr("Medya");
@@ -356,6 +357,27 @@ export component SettingsWindow inherits Window {
                             current: Store.page == 8;
                             off: !Store.volume-moment && !Store.power-moment && !Store.privacy-on && !Store.headsets-on;
                             clicked => { root.go(8); }
+                        }
+                        SideItem {
+                            title: @tr("Uyarılar");
+                            glyph: "\u{EA8F}";
+                            current: Store.page == 11;
+                            off: !Store.alert-pop && !Store.alert-sound && Store.switch-hotkey == 2;
+                            clicked => { root.go(11); }
+                        }
+                        SideItem {
+                            title: @tr("Yapay zekâ");
+                            glyph: "\u{E99A}";
+                            current: Store.page == 12;
+                            off: !Store.live-on;
+                            clicked => { root.go(12); }
+                        }
+                        SideItem {
+                            title: @tr("Bilgisayar");
+                            glyph: "\u{E9D9}";
+                            current: Store.page == 13;
+                            off: !Store.health-on && !Store.info-glance-on;
+                            clicked => { root.go(13); }
                         }
                         SideItem {
                             title: @tr("Tam ekran");
@@ -517,6 +539,9 @@ export component SettingsWindow inherits Window {
                                 if !root.searching && Store.page == 8: SystemBody { }
                                 if !root.searching && Store.page == 9: GamesBody { }
                                 if !root.searching && Store.page == 10: WellbeingBody { }
+                                if !root.searching && Store.page == 11: AlertsBody { }
+                                if !root.searching && Store.page == 12: AgentsBody { }
+                                if !root.searching && Store.page == 13: PcBody { }
                             }
                         }
                     }
@@ -685,7 +710,8 @@ export component SettingsWindow inherits Window {
                             cross-axis-alignment: center;
                             Text {
                                 text: Store.page == 0 ? @tr("Görünüm") : Store.page == 1 ? @tr("Genel") : Store.page == 2 ? @tr("Medya") : Store.page == 3 ? @tr("Zamanlayıcı")
-                                    : Store.page == 4 ? "Galaxy Buds" : Store.page == 5 ? @tr("Canlı maç") : Store.page == 6 ? @tr("Tam ekran") : Store.page == 7 ? @tr("Hakkında") : Store.page == 9 ? @tr("Oyunlar") : Store.page == 10 ? @tr("Dijital Denge") : @tr("Sistem");
+                                    : Store.page == 4 ? "Galaxy Buds" : Store.page == 5 ? @tr("Canlı maç") : Store.page == 6 ? @tr("Tam ekran") : Store.page == 7 ? @tr("Hakkında") : Store.page == 9 ? @tr("Oyunlar") : Store.page == 10 ? @tr("Dijital Denge")
+                                    : Store.page == 11 ? @tr("Uyarılar") : Store.page == 12 ? @tr("Yapay zekâ") : Store.page == 13 ? @tr("Bilgisayar") : @tr("Sistem");
                                 font-size: 14.5px;
                                 font-weight: 600;
                                 color: Theme.strong;
@@ -758,6 +784,9 @@ export component SettingsWindow inherits Window {
                             if Store.page == 8: SystemInspector { }
                             if Store.page == 9: GamesInspector { }
                             if Store.page == 10: WellbeingInspector { }
+                            if Store.page == 11: AlertsInspector { }
+                            if Store.page == 12: AgentsInspector { }
+                            if Store.page == 13: PcInspector { }
                         }
                     }
                 }

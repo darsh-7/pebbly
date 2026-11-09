@@ -538,16 +538,6 @@ export component GeneralInspector inherits VerticalLayout {
             }
         }
         IRow {
-            label: @tr("Etkinlikler arası geç");
-            note: @tr("← → gezer, ↑ son uyarı");
-            Select {
-                options: ["Win + Alt + ← →", "Ctrl + Alt + ← →", @tr("Kapalı")];
-                selected <=> Store.switch-hotkey;
-                box-width: 142px;
-                picked => { Ui.changed(); }
-            }
-        }
-        IRow {
             label: @tr("Tepsiye sol tık");
             Select {
                 options: [@tr("Seçici"), @tr("Ayarlar")];
@@ -591,72 +581,6 @@ export component GeneralInspector inherits VerticalLayout {
             note: @tr("Yeni bir şey olana dek");
             Toggle {
                 checked <=> Store.keep-user-front;
-                toggled => { Ui.changed(); }
-            }
-        }
-    }
-    ISection {
-        title: @tr("Uyarılar");
-        IRow {
-            label: @tr("Yeni olan öne gelsin");
-            note: @tr("Sonra seçtiğine döner");
-            Toggle {
-                checked <=> Store.alert-pop;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Önde kalma");
-            MiniSlider {
-                value <=> Store.alert-pop-s;
-                minimum: 2;
-                maximum: 30;
-                step: 1;
-                enabled: Store.alert-pop;
-                text: Fmt.seconds(Store.alert-pop-s);
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Müzik de öne gelsin");
-            note: @tr("Bir şarkı başlayınca");
-            Toggle {
-                checked <=> Store.alert-pop-media;
-                enabled: Store.alert-pop;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Uyarı sesi");
-            note: @tr("Claude seni bekleyince, sunucu ya da bilgisayar sorun çıkarınca");
-            Toggle {
-                checked <=> Store.alert-sound;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Ses");
-            Select {
-                options: [@tr("Takvim"), @tr("Mesaj"), @tr("Sistem"), @tr("Çanlar"), "Ding"];
-                selected <=> Store.alert-sound-name;
-                box-width: 142px;
-                picked => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Claude bitirince de");
-            Toggle {
-                checked <=> Store.alert-sound-done;
-                enabled: Store.alert-sound;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Tam ekranda da çal");
-            note: @tr("Oyun ya da video açıkken");
-            Toggle {
-                checked <=> Store.alert-sound-fullscreen;
-                enabled: Store.alert-sound;
                 toggled => { Ui.changed(); }
             }
         }
@@ -1799,49 +1723,6 @@ component CityPicker inherits VerticalLayout {
     }
 }
 
-// A one-line text box with the city box's look (no icon).
-component SmallField inherits Rectangle {
-    in-out property <string> value;
-    in property <string> placeholder;
-    in property <length> box-width: 140px;
-    in property <bool> enabled: true;
-    callback edited();
-    width: box-width;
-    height: 30px;
-    border-radius: 8px;
-    background: Theme.field;
-    border-width: 1px;
-    border-color: input.has-focus ? Theme.acc : hover.has-hover ? Theme.text3 : Theme.field-edge;
-    opacity: enabled ? 1 : 0.5;
-    hover := TouchArea {
-        mouse-cursor: text;
-        enabled: root.enabled;
-        clicked => { input.focus(); }
-    }
-    if input.text == "": Text {
-        x: 10px;
-        width: parent.width - 20px;
-        height: parent.height;
-        text: root.placeholder;
-        font-size: 13.5px;
-        color: Theme.text3;
-        vertical-alignment: center;
-        overflow: elide;
-    }
-    input := TextInput {
-        x: 10px;
-        width: parent.width - 20px;
-        height: parent.height;
-        font-size: 13.5px;
-        color: Theme.strong;
-        vertical-alignment: center;
-        single-line: true;
-        enabled: root.enabled;
-        text <=> root.value;
-        edited => { root.edited(); }
-    }
-}
-
 export component SystemInspector inherits VerticalLayout {
     alignment: start;
     ISection {
@@ -1929,176 +1810,6 @@ export component SystemInspector inherits VerticalLayout {
             Toggle {
                 checked <=> Store.transfer-on;
                 toggled => { Ui.changed(); }
-            }
-        }
-    }
-    ISection {
-        title: @tr("Canlı etkinlikler");
-        IRow {
-            label: @tr("Canlı etkinlikler");
-            note: @tr("Betikler ve Claude Code pilde");
-            Toggle {
-                checked <=> Store.live-on;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Claude izinleri");
-            note: @tr("Kartta İzin ver / Reddet");
-            Toggle {
-                checked <=> Store.claude-ask;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Bekleme");
-            note: @tr("Sonra Claude sorar");
-            MiniSlider {
-                value <=> Store.claude-ask-wait;
-                minimum: 10;
-                maximum: 300;
-                step: 5;
-                text: Fmt.seconds(Store.claude-ask-wait);
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Biten kalsın");
-            note: @tr("Claude bitince pilde");
-            MiniSlider {
-                value <=> Store.live-done-keep;
-                minimum: 3;
-                maximum: 120;
-                step: 1;
-                enabled: Store.live-on;
-                text: Fmt.seconds(Store.live-done-keep);
-                moved => { Ui.changed(); }
-            }
-        }
-    }
-    ISection {
-        title: @tr("Bilgisayar sağlığı");
-        IRow {
-            label: @tr("Sorun olunca göster");
-            note: @tr("İşlemci, bellek ya da C: sınırı aşınca");
-            Toggle {
-                checked <=> Store.health-on;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("İşlemci");
-            MiniSlider {
-                value <=> Store.health-cpu;
-                minimum: 50;
-                maximum: 100;
-                step: 5;
-                enabled: Store.health-on;
-                text: Fmt.pct(Store.health-cpu);
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Bellek");
-            MiniSlider {
-                value <=> Store.health-ram;
-                minimum: 50;
-                maximum: 100;
-                step: 5;
-                enabled: Store.health-on;
-                text: Fmt.pct(Store.health-ram);
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("C: boş yer");
-            note: @tr("Altına inince");
-            MiniSlider {
-                value <=> Store.health-disk;
-                minimum: 1;
-                maximum: 100;
-                step: 1;
-                enabled: Store.health-on;
-                text: round(Store.health-disk) + " GB";
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Ne kadar sürerse");
-            note: @tr("Kısa sıçramalar sayılmaz");
-            MiniSlider {
-                value <=> Store.health-for;
-                minimum: 5;
-                maximum: 300;
-                step: 5;
-                enabled: Store.health-on;
-                text: Fmt.seconds(Store.health-for);
-                moved => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Kontrol sıklığı");
-            MiniSlider {
-                value <=> Store.health-every;
-                minimum: 2;
-                maximum: 60;
-                step: 1;
-                enabled: Store.health-on;
-                text: Fmt.seconds(Store.health-every);
-                moved => { Ui.changed(); }
-            }
-        }
-    }
-    ISection {
-        title: @tr("Geliştirme sunucuları");
-        IRow {
-            label: @tr("Düşünce göster");
-            note: @tr("Durunca ve geri gelince");
-            Toggle {
-                checked <=> Store.dev-on;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Portlar");
-            note: @tr("Ad:port, virgülle");
-            SmallField {
-                value <=> Store.dev-ports;
-                placeholder: "api:3000, web:5173";
-                box-width: 160px;
-                enabled: Store.dev-on;
-                edited => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Docker kapsayıcıları");
-            Toggle {
-                checked <=> Store.dev-docker;
-                enabled: Store.dev-on;
-                toggled => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Yalnızca adında");
-            note: @tr("Boş: hepsi");
-            SmallField {
-                value <=> Store.dev-docker-filter;
-                placeholder: "tapi";
-                box-width: 160px;
-                enabled: Store.dev-on && Store.dev-docker;
-                edited => { Ui.changed(); }
-            }
-        }
-        IRow {
-            label: @tr("Kontrol sıklığı");
-            MiniSlider {
-                value <=> Store.dev-every;
-                minimum: 10;
-                maximum: 300;
-                step: 5;
-                enabled: Store.dev-on;
-                text: Fmt.seconds(Store.dev-every);
-                moved => { Ui.changed(); }
             }
         }
     }
@@ -2470,6 +2181,414 @@ export component WellbeingInspector inherits VerticalLayout {
             Toggle {
                 checked <=> Store.music-week;
                 toggled => { Ui.changed(); }
+            }
+        }
+    }
+}
+
+// ================================================================== 11 Uyarılar
+
+export component AlertsBody inherits VerticalLayout {
+    alignment: start;
+    H4 {
+        title: @tr("Yeni bir şey olunca");
+        count: @tr("tıkla: aç / kapat");
+    }
+    LRow {
+        title: @tr("Öne gelir");
+        sub: Store.alert-pop ? Fmt.seconds(Store.alert-pop-s) + " · " + @tr("sonra seçtiğine döner") : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{EA8F}";
+        clicked => {
+            Store.alert-pop = !Store.alert-pop;
+            Ui.changed();
+        }
+        Tag { text: Store.alert-pop ? @tr("Açık") : @tr("Kapalı"); }
+    }
+    LRow {
+        title: @tr("Uyarı sesi");
+        sub: Store.alert-sound ? @tr("Claude seni bekleyince, bilgisayar sorun çıkarınca") : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E767}";
+        clicked => {
+            Store.alert-sound = !Store.alert-sound;
+            Ui.changed();
+        }
+        Tag { text: Store.alert-sound ? @tr("Açık") : @tr("Kapalı"); }
+    }
+    H4 {
+        title: @tr("Kısayollar");
+        count: "";
+    }
+    LRow {
+        title: @tr("Önceki / sonraki");
+        sub: @tr("yığında gez");
+        lead: 1;
+        glyph: "\u{E8AB}";
+        if Store.switch-hotkey < 2: HorizontalLayout {
+            spacing: 4px;
+            Keycap { key: Store.switch-hotkey == 1 ? "Ctrl" : "Win"; size: 26px; }
+            Keycap { key: "Alt"; size: 26px; }
+            Keycap { key: "←"; size: 26px; }
+            Keycap { key: "→"; size: 26px; }
+        }
+        if Store.switch-hotkey == 2: Tag { text: @tr("Kapalı"); }
+    }
+    LRow {
+        title: @tr("Son uyarı");
+        sub: @tr("son değişeni öne getirir");
+        lead: 1;
+        glyph: "\u{EA8F}";
+        if Store.switch-hotkey < 2: HorizontalLayout {
+            spacing: 4px;
+            Keycap { key: Store.switch-hotkey == 1 ? "Ctrl" : "Win"; size: 26px; }
+            Keycap { key: "Alt"; size: 26px; }
+            Keycap { key: "↑"; size: 26px; }
+        }
+        if Store.switch-hotkey == 2: Tag { text: @tr("Kapalı"); }
+    }
+}
+
+export component AlertsInspector inherits VerticalLayout {
+    alignment: start;
+    ISection {
+        title: @tr("Öne gelme");
+        first: true;
+        IRow {
+            label: @tr("Yeni olan öne gelsin");
+            note: @tr("Sonra seçtiğine döner");
+            Toggle {
+                checked <=> Store.alert-pop;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Önde kalma");
+            MiniSlider {
+                value <=> Store.alert-pop-s;
+                minimum: 2;
+                maximum: 30;
+                step: 1;
+                enabled: Store.alert-pop;
+                text: Fmt.seconds(Store.alert-pop-s);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Müzik de öne gelsin");
+            note: @tr("Bir şarkı başlayınca");
+            Toggle {
+                checked <=> Store.alert-pop-media;
+                enabled: Store.alert-pop;
+                toggled => { Ui.changed(); }
+            }
+        }
+    }
+    ISection {
+        title: @tr("Ses");
+        IRow {
+            label: @tr("Uyarı sesi");
+            note: @tr("Seni bekleyen bir şey olunca");
+            Toggle {
+                checked <=> Store.alert-sound;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Ses");
+            Select {
+                options: [@tr("Takvim"), @tr("Mesaj"), @tr("Sistem"), @tr("Çanlar"), "Ding"];
+                selected <=> Store.alert-sound-name;
+                box-width: 142px;
+                picked => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Ajan bitirince de");
+            note: @tr("Claude Code ya da Antigravity");
+            Toggle {
+                checked <=> Store.alert-sound-done;
+                enabled: Store.alert-sound;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Tam ekranda da çal");
+            note: @tr("Oyun ya da video açıkken");
+            Toggle {
+                checked <=> Store.alert-sound-fullscreen;
+                enabled: Store.alert-sound;
+                toggled => { Ui.changed(); }
+            }
+        }
+    }
+    ISection {
+        title: @tr("Kısayollar");
+        IRow {
+            label: @tr("Etkinlikler arası geç");
+            note: @tr("↑ son uyarı");
+            Select {
+                options: ["Win + Alt + ← →", "Ctrl + Alt + ← →", @tr("Kapalı")];
+                selected <=> Store.switch-hotkey;
+                box-width: 142px;
+                picked => { Ui.changed(); }
+            }
+        }
+    }
+}
+
+// ================================================================== 12 Yapay zekâ
+
+export component AgentsBody inherits VerticalLayout {
+    alignment: start;
+    H4 {
+        title: @tr("Ajanlar");
+        count: @tr("tıkla: aç / kapat");
+    }
+    LRow {
+        title: "Claude Code";
+        sub: Store.live-on ? @tr("adım, görevler, izin kartı") : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E99A}";
+        clicked => {
+            Store.live-on = !Store.live-on;
+            Ui.changed();
+        }
+        Tag { text: Store.live-on ? @tr("Açık") : @tr("Kapalı"); }
+    }
+    LRow {
+        title: "Antigravity";
+        sub: (Store.agy-on && Store.live-on) ? (Store.agy-installed ? @tr("adım, dosya, bitince") : @tr("bu bilgisayarda kullanılmamış")) : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E945}";
+        clicked => {
+            Store.agy-on = !Store.agy-on;
+            Ui.changed();
+        }
+        Tag { text: (Store.agy-on && Store.live-on) ? @tr("Açık") : @tr("Kapalı"); }
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-top: 8px;
+        Text {
+            text: @tr("Bir ajan çalışırken pilde ne yaptığı görünür; seni bekleyince ya da bitince öne gelir.");
+            font-size: 13px;
+            color: Theme.text2;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component AgentsInspector inherits VerticalLayout {
+    alignment: start;
+    ISection {
+        title: "Claude Code";
+        first: true;
+        IRow {
+            label: @tr("Canlı etkinlikler");
+            note: @tr("Betikler ve Claude Code pilde");
+            Toggle {
+                checked <=> Store.live-on;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Claude izinleri");
+            note: @tr("Kartta İzin ver / Reddet");
+            Toggle {
+                checked <=> Store.claude-ask;
+                enabled: Store.live-on;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Bekleme");
+            note: @tr("Sonra Claude sorar");
+            MiniSlider {
+                value <=> Store.claude-ask-wait;
+                minimum: 10;
+                maximum: 300;
+                step: 5;
+                enabled: Store.live-on && Store.claude-ask;
+                text: Fmt.seconds(Store.claude-ask-wait);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Biten kalsın");
+            note: @tr("Bitince pilde");
+            MiniSlider {
+                value <=> Store.live-done-keep;
+                minimum: 3;
+                maximum: 120;
+                step: 1;
+                enabled: Store.live-on;
+                text: Fmt.seconds(Store.live-done-keep);
+                moved => { Ui.changed(); }
+            }
+        }
+    }
+    ISection {
+        title: "Antigravity";
+        IRow {
+            label: @tr("Antigravity ajanları");
+            note: Store.agy-installed ? @tr("Hook'ları Pebbly kurar") : @tr("Bu bilgisayarda kullanılmamış");
+            Toggle {
+                checked <=> Store.agy-on;
+                enabled: Store.live-on;
+                toggled => { Ui.changed(); }
+            }
+        }
+    }
+}
+
+// ================================================================== 13 Bilgisayar
+
+export component PcBody inherits VerticalLayout {
+    alignment: start;
+    H4 {
+        title: @tr("Pilde");
+        count: @tr("tıkla: aç / kapat");
+    }
+    LRow {
+        title: @tr("Sağlık uyarıları");
+        sub: Store.health-on ? @tr("İşlemci") + " " + Fmt.pct(Store.health-cpu) + " · " + @tr("Bellek") + " " + Fmt.pct(Store.health-ram) + " · C: " + round(Store.health-disk) + " GB" : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E9D9}";
+        clicked => {
+            Store.health-on = !Store.health-on;
+            Ui.changed();
+        }
+        Tag { text: Store.health-on ? @tr("Açık") : @tr("Kapalı"); }
+    }
+    LRow {
+        title: @tr("Genel bilgi");
+        sub: Store.info-glance-on ? Fmt.minutes(Store.info-glance-every) + " · " + Fmt.seconds(Store.info-glance-s) : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E946}";
+        clicked => {
+            Store.info-glance-on = !Store.info-glance-on;
+            Ui.changed();
+        }
+        Tag { text: Store.info-glance-on ? @tr("Açık") : @tr("Kapalı"); }
+    }
+}
+
+export component PcInspector inherits VerticalLayout {
+    alignment: start;
+    ISection {
+        title: @tr("Bilgisayar sağlığı");
+        first: true;
+        IRow {
+            label: @tr("Sorun olunca göster");
+            note: @tr("İşlemci, bellek ya da C: sınırı aşınca");
+            Toggle {
+                checked <=> Store.health-on;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("İşlemci");
+            MiniSlider {
+                value <=> Store.health-cpu;
+                minimum: 50;
+                maximum: 100;
+                step: 5;
+                enabled: Store.health-on;
+                text: Fmt.pct(Store.health-cpu);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Bellek");
+            MiniSlider {
+                value <=> Store.health-ram;
+                minimum: 50;
+                maximum: 100;
+                step: 5;
+                enabled: Store.health-on;
+                text: Fmt.pct(Store.health-ram);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("C: boş yer");
+            note: @tr("Altına inince");
+            MiniSlider {
+                value <=> Store.health-disk;
+                minimum: 1;
+                maximum: 100;
+                step: 1;
+                enabled: Store.health-on;
+                text: round(Store.health-disk) + " GB";
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Ne kadar sürerse");
+            note: @tr("Kısa sıçramalar sayılmaz");
+            MiniSlider {
+                value <=> Store.health-for;
+                minimum: 5;
+                maximum: 300;
+                step: 5;
+                enabled: Store.health-on;
+                text: Fmt.seconds(Store.health-for);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Kontrol sıklığı");
+            MiniSlider {
+                value <=> Store.health-every;
+                minimum: 2;
+                maximum: 60;
+                step: 1;
+                enabled: Store.health-on;
+                text: Fmt.seconds(Store.health-every);
+                moved => { Ui.changed(); }
+            }
+        }
+    }
+    ISection {
+        title: @tr("Genel bilgi");
+        IRow {
+            label: @tr("Arada bir göster");
+            note: @tr("İşlemci, bellek, boş yer, açık kalma");
+            Toggle {
+                checked <=> Store.info-glance-on;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Ne sıklıkla");
+            MiniSlider {
+                value <=> Store.info-glance-every;
+                minimum: 5;
+                maximum: 240;
+                step: 5;
+                enabled: Store.info-glance-on;
+                text: Fmt.minutes(Store.info-glance-every);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Pilde kalma");
+            MiniSlider {
+                value <=> Store.info-glance-s;
+                minimum: 3;
+                maximum: 30;
+                step: 1;
+                enabled: Store.info-glance-on;
+                text: Fmt.seconds(Store.info-glance-s);
+                moved => { Ui.changed(); }
             }
         }
     }

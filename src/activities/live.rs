@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::i18n::{tr, trf};
 
 use crate::activities::api::Button;
-use crate::activities::claude::{ask_detail, error_text, file_of, step_label, step_of, summary_of, task_change, Ask, Call, ClaudeInfo, ClaudeNote};
+use crate::activities::claude::{ask_detail, error_text, file_of, step_label, step_of, summary_of, task_change, Ask, Call, ClaudeInfo, ClaudeNote, Step};
 use crate::render::crest::Crest;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,7 +245,7 @@ impl LiveSet {
     fn gone_at(i: &LiveItem) -> u64 {
         let stale = match i.state {
             LiveState::Done => i.changed_ms + live_done_ms(),
-            LiveState::Run | LiveState::Wait if i.claude => i.seen_ms + LIVE_CLAUDE_STALE_MS + 1,
+            LiveState::Run | LiveState::Wait if i.agent() => i.seen_ms + LIVE_CLAUDE_STALE_MS + 1,
             _ => i.seen_ms + LIVE_STALE_MS + 1,
         };
         i.until_ms.map_or(stale, |until| until.min(stale))
@@ -347,6 +347,67 @@ impl LiveSet {
 ///
 /// The hook process adds `pebbly_window` (the foreground window at UserPromptSubmit) and
 /// `pebbly_ask_id` (when it waits for an answer from the card) to Claude Code's JSON.
+impl LiveItem {
+    /// A coding agent's session: Claude Code's or Antigravity's.
+    pub fn agent(&self) -> bool {
+        self.claude || self.id.starts_with("agy:")
+    }
+}
+
+/// The first non-empty string among `keys` in `args`.
+fn arg<'a>(args: &'a serde_json::Value, keys: &[&str]) -> &'a str {
+    keys.iter().filter_map(|k| args[*k].as_str()).find(|s| !s.trim().is_empty()).unwrap_or("")
+}
+
+/// Antigravity's tool call as a step ("Düzenliyor: app.rs"); its tools and their arguments
+/// have their own names (`run_command`'s `CommandLine`, `write_to_file`'s `TargetFile`...).
+pub fn agy_step(tool: &str, args: &serde_json::Value) -> (Step, Option<String>) {
+    use crate::activities::claude::StepKind;
+    let file = || arg(args, &["TargetFile", "AbsolutePath", "File", "FilePath", "path"]);
+    let name = |p: &str| p.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(p).to_string();
+    let (kind, target, changed) = match tool {
+        "run_command" | "send_command_input" => (StepKind::Run, arg(args, &["CommandLine", "Command", "command"]).lines().next().unwrap_or("").to_string(), None),
+        "view_file" | "view_file_outline" | "view_code_item" => (StepKind::Read, name(file()), None),
+        "write_to_file" => (StepKind::Write, name(file()), Some(file().to_string())),
+        "replace_file_content" | "multi_replace_file_content" => (StepKind::Edit, name(file()), Some(file().to_string())),
+        "grep_search" | "find_by_name" | "codebase_search" | "search_web" => (StepKind::Search, arg(args, &["Query", "Pattern", "query", "SearchPath"]).to_string(), None),
+        "list_dir" => (StepKind::Read, name(arg(args, &["DirectoryPath", "path"])), None),
+        "read_url_content" | "read_browser_page" => (StepKind::Read, arg(args, &["Url", "url"]).split("://").last().unwrap_or("").split('/').next().unwrap_or("").to_string(), None),
+        "browser_subagent" => (StepKind::Agent, arg(args, &["TaskName", "Task", "task"]).to_string(), None),
+        _ => (StepKind::Tool, tool.to_string(), None),
+    };
+    (Step { kind, target: cut(&target, 120) }, changed.filter(|f| !f.is_empty()))
+}
+
+/// One Antigravity hook call (`event`: the hook's name, which its JSON doesn't carry). None
+/// for what isn't news (PostInvocation; a Stop while it isn't fully idle).
+pub fn agy_msg(event: &str, hook: &serde_json::Value) -> Option<LiveMsg> {
+    let conversation = hook["conversationId"].as_str().filter(|s| !s.is_empty())?;
+    let mut note = ClaudeNote::default();
+    let (state, text) = match event {
+        "SessionStart" | "PreInvocation" => (LiveState::Run, tr("Düşünüyor").to_string()),
+        "PostToolUse" => {
+            let (step, file) = agy_step(hook["toolCall"]["name"].as_str().unwrap_or(""), &hook["toolCall"]["args"]);
+            let label = step_label(&step);
+            (note.step, note.file) = (Some(step), file);
+            (LiveState::Run, label)
+        }
+        "Stop" if hook["fullyIdle"].as_bool() == Some(false) => return None,
+        "Stop" => match hook["error"].as_str().filter(|e| !e.is_empty()) {
+            Some(_) => (LiveState::Done, tr("Bir hata oldu").to_string()),
+            None => (LiveState::Done, tr("Bitti").to_string()),
+        },
+        _ => return None,
+    };
+    let folder = hook["workspacePaths"][0].as_str().unwrap_or("").split(['\\', '/']).rfind(|p| !p.is_empty());
+    let title = match folder {
+        Some(f) => format!("Antigravity · {f}"),
+        None => "Antigravity".to_string(),
+    };
+    let claude = (note != ClaudeNote::default()).then_some(note);
+    Some(LiveMsg { id: format!("agy:{conversation}"), title, text, progress: None, state, claude, app: None })
+}
+
 pub fn claude_msg(hook: &serde_json::Value) -> Option<LiveMsg> {
     let session = hook["session_id"].as_str().filter(|s| !s.is_empty())?;
     let (tool, input) = (hook["tool_name"].as_str().unwrap_or(""), &hook["tool_input"]);
@@ -407,6 +468,7 @@ pub fn claude_msg(hook: &serde_json::Value) -> Option<LiveMsg> {
 /// "Bitti".
 pub fn pill_status(item: &LiveItem, now_ms: u64) -> String {
     match item.state {
+        LiveState::Run if item.id.starts_with("watch:") && !item.text.is_empty() => item.text.clone(),
         LiveState::Run => match item.progress {
             Some(p) => crate::i18n::percent(p),
             None => {
@@ -662,6 +724,24 @@ mod tests {
         assert_eq!(title("/home/k/proj/").as_deref(), Some("proj"));
         assert_eq!(title("C:\\Users\\Ekin\\Masaüstü\\çalışma").as_deref(), Some("çalışma"));
         assert_eq!(title("").as_deref(), Some("Claude"));
+    }
+
+    #[test]
+    fn antigravity_hooks_become_a_session() {
+        let base = serde_json::json!({"conversationId": "c1", "workspacePaths": ["E:\\work\\tapi"]});
+        let mut tool = base.clone();
+        tool["toolCall"] = serde_json::json!({"name": "replace_file_content", "args": {"TargetFile": "E:\\work\\tapi\\app.ts"}});
+        let m = agy_msg("PostToolUse", &tool).unwrap();
+        assert_eq!((m.id.as_str(), m.title.as_str(), m.state), ("agy:c1", "Antigravity · tapi", LiveState::Run));
+        assert!(m.text.ends_with("app.ts"), "{}", m.text);
+        assert_eq!(m.claude.and_then(|n| n.file).as_deref(), Some("E:\\work\\tapi\\app.ts"));
+        let mut busy = base.clone();
+        busy["fullyIdle"] = serde_json::json!(false);
+        assert!(agy_msg("Stop", &busy).is_none(), "not idle yet: not done");
+        busy["fullyIdle"] = serde_json::json!(true);
+        assert_eq!(agy_msg("Stop", &busy).unwrap().state, LiveState::Done);
+        assert!(agy_msg("PostInvocation", &base).is_none());
+        assert!(agy_msg("PreInvocation", &serde_json::json!({})).is_none(), "no conversation: nothing");
     }
 
     #[test]
