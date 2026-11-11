@@ -428,6 +428,11 @@ fn fill(ui: &SettingsWindow, s: &Settings, live_apps: &[String]) {
     st.set_pill_offset(s.pill_offset_dip as f32);
     st.set_pill_opacity(s.pill_opacity_pct as f32);
     st.set_pill_slivers(s.pill_slivers);
+    st.set_pill_width(s.pill_width_pct as f32);
+    st.set_pill_second(s.pill_second);
+    st.set_pill_icons(s.pill_icons);
+    st.set_hover_open(s.hover_open_ds as f32);
+    st.set_net_on(s.net_on);
     st.set_accent(s.accent_color.to_uppercase().into());
     st.set_wallpaper_accent(s.accent_from_wallpaper);
     show_accent(&st);
@@ -565,6 +570,11 @@ fn read(ui: &SettingsWindow, base: &Settings) -> Settings {
         pill_offset_dip: st.get_pill_offset().round() as i32,
         pill_opacity_pct: st.get_pill_opacity().round() as u8,
         pill_slivers: st.get_pill_slivers(),
+        pill_width_pct: st.get_pill_width().round() as u32,
+        pill_second: st.get_pill_second(),
+        pill_icons: st.get_pill_icons(),
+        hover_open_ds: st.get_hover_open().round() as u32,
+        net_on: st.get_net_on(),
         accent_color: st.get_accent().to_string(),
         accent_from_wallpaper: st.get_wallpaper_accent(),
         use_cover_color: st.get_cover_color(),

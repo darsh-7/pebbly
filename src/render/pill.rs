@@ -41,11 +41,54 @@ pub fn timer_accent() -> (u8, u8, u8) {
     s.accent_from_wallpaper.then(crate::platform::wallpaper::accent).flatten().unwrap_or_else(|| s.accent())
 }
 pub const BUDS_ACCENT: (u8, u8, u8) = (0x35, 0x79, 0xFF);
+/// Antigravity's agents (its blue).
+pub const AGY_ACCENT: (u8, u8, u8) = (0x3D, 0x7B, 0xF7);
 pub const PILL_H_DIP: f32 = 32.0;
 /// Each activity behind the front one peeks out this much further to the right.
 pub const SLIVER_STEP_DIP: f32 = 6.0;
-/// The widest pill (media), and how many activities behind it get a sliver.
-const WIDEST_PILL_DIP: f32 = 300.0;
+/// The widest pill (media) at the widest width setting, and how many activities behind it get a sliver.
+const WIDEST_PILL_DIP: f32 = 300.0 * 1.6;
+/// The next event beside the front one, and each icon after it.
+pub const SECOND_DIP: f32 = 190.0;
+pub const ICON_STEP_DIP: f32 = 28.0;
+/// Padding after the last icon.
+const ICONS_END_DIP: f32 = 4.0;
+
+/// What sits at the pill's end after the front event: the next one (`second`), the icons of
+/// `icons` more, and slivers for the rest (`slivers`: the old look, when icons are off).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Extras {
+    pub second: bool,
+    pub icons: usize,
+    pub slivers: bool,
+}
+
+impl Extras {
+    /// The most the settings can ask for.
+    const MOST_DIP: f32 = SECOND_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP;
+
+    /// From the settings, for `behind` events behind the front one.
+    pub fn wanted(behind: usize) -> Extras {
+        let s = crate::settings::current();
+        let second = s.pill_second && behind > 0;
+        let icons = if s.pill_slivers && s.pill_icons { behind.saturating_sub(second as usize).min(2) } else { 0 };
+        Extras { second, icons, slivers: s.pill_slivers && !s.pill_icons }
+    }
+
+    /// The same with less (the taskbar is short of room): first no icons, then no second.
+    pub fn less(self) -> Option<Extras> {
+        match self {
+            Extras { icons: 1.., .. } => Some(Extras { icons: 0, ..self }),
+            Extras { second: true, .. } => Some(Extras { second: false, ..self }),
+            _ => None,
+        }
+    }
+
+    pub fn dip(&self) -> f32 {
+        let icons = if self.icons > 0 { self.icons as f32 * ICON_STEP_DIP + ICONS_END_DIP } else { 0.0 };
+        (if self.second { SECOND_DIP } else { 0.0 }) + icons
+    }
+}
 pub const MAX_SLIVERS: usize = 4;
 /// Key frames of the width spring (linear between them, like the morph's).
 const WIDTH_FRAMES: usize = 32;
@@ -283,6 +326,8 @@ pub enum PillButton {
     Prev,
     PlayPause,
     Next,
+    /// The second event or an icon at the pill's end: brings that one (index into `behind`) to the front.
+    Behind(u8),
 }
 
 fn color(a: u8, (r, g, b): (u8, u8, u8)) -> Color {
@@ -304,7 +349,18 @@ impl PillContent {
         PillContent::Media(MediaSnapshot { timeline: None, ..m })
     }
 
+    /// The pill's width for this activity, the width setting's % of its usual.
     pub fn width_dip(&self) -> f32 {
+        let k = crate::settings::current().pill_width_pct as f32 / 100.0;
+        match self {
+            // Already the pill it replaced (scaled): kept as it is.
+            PillContent::Shelf { min_width_dip, .. } => min_width_dip.max((200.0 * k).round()),
+            _ => (self.base_width_dip() * k).round(),
+        }
+    }
+
+    /// The width at 100 %.
+    pub fn base_width_dip(&self) -> f32 {
         match self {
             PillContent::Timer { .. } | PillContent::Stopwatch { .. } => 176.0,
             PillContent::Media(_) => 300.0,
@@ -324,7 +380,9 @@ impl PillContent {
             PillContent::Away { .. } => 240.0,
             PillContent::Transfer { .. } => 260.0,
             PillContent::Shelf { min_width_dip, .. } => min_width_dip.max(200.0),
+            // Claude's and Antigravity's step beside the title.
             PillContent::Live { claude: true, .. } | PillContent::App { .. } => 300.0,
+            PillContent::Live { action, .. } if !action.is_empty() => 300.0,
             PillContent::Clock { .. } | PillContent::Weather { .. } | PillContent::Live { .. } => 220.0,
             PillContent::Match(m) if m.moment.is_some() => 240.0,
             PillContent::Match(m) if m.wide => 220.0,
@@ -347,6 +405,8 @@ impl PillContent {
             PillContent::Game { store, .. } => store_accent(*store),
             PillContent::Usage { .. } => WELLBEING_ACCENT,
             PillContent::Live { claude: true, .. } => CLAUDE_ACCENT,
+            // ponytail: told apart by agy_msg's title; an `agy` field if a second agent needs its colour.
+            PillContent::Live { title, .. } if title.starts_with("Antigravity") => AGY_ACCENT,
             PillContent::Live { .. } => timer_accent(),
             PillContent::App { accent, .. } => *accent,
             PillContent::Privacy { cam: true, .. } => CAMERA_ACCENT,
@@ -429,13 +489,22 @@ pub struct PillLayout {
     pub content_w: i32,
     /// Only the circle shows (no room on the taskbar for the whole pill).
     pub compact: bool,
+    /// The second event's and the icons' part at the right end (in `pill_w`).
+    pub extras_w: i32,
 }
 
 pub fn layout_for(front: &PillContent, s: &Scale) -> PillLayout {
     let pill_w = s.even_px(front.width_dip()) as i32;
     let pill_h = s.px(PILL_H_DIP) as i32;
-    let frame_w = s.even_px(WIDEST_PILL_DIP) as i32 + 2 * s.px(SLIVER_STEP_DIP * MAX_SLIVERS as f32) as i32;
-    PillLayout { pill_w, pill_h, frame_w, radius: pill_h / 2, content_w: pill_w, compact: false }
+    let frame_w = s.even_px(WIDEST_PILL_DIP + Extras::MOST_DIP) as i32 + 2 * s.px(SLIVER_STEP_DIP * MAX_SLIVERS as f32) as i32;
+    PillLayout { pill_w, pill_h, frame_w, radius: pill_h / 2, content_w: pill_w, compact: false, extras_w: 0 }
+}
+
+/// The pill with `ex` at its end.
+pub fn layout_with(front: &PillContent, ex: Extras, s: &Scale) -> PillLayout {
+    let l = layout_for(front, s);
+    let extras_w = s.even_px(ex.dip()) as i32;
+    PillLayout { pill_w: l.pill_w + extras_w, extras_w, ..l }
 }
 
 /// The compact pill: only its circle, as wide as the pill is tall; the content is still painted
@@ -573,6 +642,13 @@ pub struct PillVisual {
     /// The weather's moving background, between the body and the content, and what it shows.
     fx: ContainerVisual,
     fx_for: Option<(WeatherFx, i32, i32)>,
+    /// The second event and the icons, right-anchored in the pill on their own surface (so a
+    /// tick of theirs doesn't repaint the front), and what it shows.
+    extras: SpriteVisual,
+    extras_surface: CompositionDrawingSurface,
+    extras_for: Option<(Vec<PillContent>, Extras, i32, i32)>,
+    /// Clicks on the second event and the icons: index into `behind`.
+    extra_buttons: Vec<(i32, i32, PillButton)>,
 }
 
 /// Binds `property` of `target` to `expression`, which reads the pill's property set as `p`
@@ -607,7 +683,7 @@ impl PillVisual {
         let root = c.CreateContainerVisual()?;
         root.SetRelativeSizeAdjustment(Vector2 { X: 1.0, Y: 1.0 })?;
         let props = c.CreatePropertySet()?;
-        for name in [h!("W"), h!("H"), h!("F")] {
+        for name in [h!("W"), h!("H"), h!("F"), h!("E")] {
             props.InsertScalar(name, 1.0)?;
         }
         let slivers = c.CreateShapeVisual()?;
@@ -645,6 +721,11 @@ impl PillVisual {
         root.Children()?.InsertAtTop(&pill)?;
         let layers = [Layer::new(g, &pill)?, Layer::new(g, &pill)?];
         layers[1].root.SetOpacity(0.0)?;
+        let extras_surface = new_surface(g, 1, 1)?;
+        let extras = c.CreateSpriteVisual()?;
+        extras.SetBrush(&c.CreateSurfaceBrushWithSurface(&extras_surface)?)?;
+        follow(&c, &props, &extras, "Offset", "Vector3(p.W - p.E, 0, 0)", &[])?;
+        pill.Children()?.InsertAtTop(&extras)?;
         parent.Children()?.InsertAtTop(&root)?;
         Ok(PillVisual {
             c,
@@ -663,6 +744,10 @@ impl PillVisual {
             sung: None,
             fx,
             fx_for: None,
+            extras,
+            extras_surface,
+            extras_for: None,
+            extra_buttons: Vec::new(),
         })
     }
 
@@ -718,15 +803,21 @@ impl PillVisual {
     /// at most [`MAX_SLIVERS`]). `fade` cross-fades the content (the front activity changed);
     /// a new width or body colour animates whenever the pill is already on show.
     /// `compact` keeps only the circle (see [`compact_layout`]).
-    pub fn show(&mut self, g: &Gfx, front: &PillContent, behind: &[PillContent], s: &Scale, fade: bool, compact: bool) -> Result<PillLayout> {
-        let l = if compact { compact_layout(front, s) } else { layout_for(front, s) };
-        let behind = &behind[..behind.len().min(MAX_SLIVERS)];
+    pub fn show(&mut self, g: &Gfx, front: &PillContent, behind: &[PillContent], ex: Extras, s: &Scale, fade: bool, compact: bool) -> Result<PillLayout> {
+        let ex = if compact { Extras::default() } else { ex };
+        let l = if compact { compact_layout(front, s) } else { layout_with(front, ex, s) };
+        // The second event and the icons take the first ones behind; slivers (if on) the rest.
+        let shown = (ex.second as usize + ex.icons).min(behind.len());
+        let (at_end, rest) = behind.split_at(shown);
+        self.show_extras(g, at_end, ex, l, s)?;
+        let behind = if ex.slivers { &rest[..rest.len().min(MAX_SLIVERS)] } else { &[] };
         let (top, bottom) = front.base();
         let accent = front.accent();
         let colours = [top, bottom, color(if front.has_accent_gradient() { 97 } else { 0 }, accent), color(0, accent)];
         let animate = self.painted.is_some();
         self.props.InsertScalar(h!("H"), l.pill_h as f32)?;
         self.props.InsertScalar(h!("F"), l.frame_w as f32)?;
+        self.props.InsertScalar(h!("E"), l.extras_w as f32)?;
         let w = l.pill_w as f32;
         let (width_changed, colours_changed) = match &self.shown {
             Some((sw, sc)) => (*sw != w, sc.map(key) != colours.map(key)),
@@ -790,6 +881,33 @@ impl PillVisual {
             self.pop()?;
         }
         Ok(l)
+    }
+
+    /// Paints the second event and the icons (`items`, in that order) when they changed, and
+    /// notes where a click on each lands.
+    fn show_extras(&mut self, g: &Gfx, items: &[PillContent], ex: Extras, l: PillLayout, s: &Scale) -> Result<()> {
+        let key = (items.to_vec(), ex, l.extras_w, l.pill_h);
+        if self.extras_for.as_ref() == Some(&key) {
+            return Ok(());
+        }
+        self.extras_for = Some(key);
+        self.extras.SetSize(Vector2 { X: l.extras_w as f32, Y: l.pill_h as f32 })?;
+        self.extra_buttons.clear();
+        if l.extras_w == 0 || items.is_empty() {
+            return Ok(());
+        }
+        let x0 = l.pill_w - l.extras_w;
+        let (second, icons) = if ex.second { (items.first(), &items[1..]) } else { (None, items) };
+        let second_w = if second.is_some() { s.px(SECOND_DIP) as i32 } else { 0 };
+        if second.is_some() {
+            self.extra_buttons.push((x0, x0 + second_w, PillButton::Behind(0)));
+        }
+        let step = s.px(ICON_STEP_DIP) as i32;
+        for i in 0..icons.len() {
+            let from = x0 + second_w + i as i32 * step;
+            self.extra_buttons.push((from, from + step, PillButton::Behind((ex.second as usize + i) as u8)));
+        }
+        paint_surface(g, &self.extras_surface, l.extras_w, l.pill_h, |ink| paint_extras(ink, second, icons, l.pill_h as f32, s))
     }
 
     /// Springs the pill to `w` px from wherever it is now (an interrupted spring carries on
@@ -929,11 +1047,12 @@ impl PillVisual {
     pub fn forget_paint(&mut self) {
         self.painted = None;
         self.slivers_for = None;
+        self.extras_for = None;
     }
 
     /// Clickable part at `x` pixels from the pill's left edge.
     pub fn button_at(&self, x: i32) -> Option<PillButton> {
-        self.buttons.iter().find(|(from, to, _)| x >= *from && x < *to).map(|(_, _, b)| *b)
+        self.buttons.iter().chain(&self.extra_buttons).find(|(from, to, _)| x >= *from && x < *to).map(|(_, _, b)| *b)
     }
 
     pub fn look(&self, front: &PillContent, l: &PillLayout) -> PillLook {
@@ -941,8 +1060,11 @@ impl PillVisual {
         let mut layers = vec![LookLayer {
             surface: layer.content_surface.clone(),
             offset: (0.0, 0.0),
-            size: (l.pill_w as f32, l.pill_h as f32),
+            size: (l.content_w.min(l.pill_w) as f32, l.pill_h as f32),
         }];
+        if l.extras_w > 0 && !l.compact {
+            layers.push(LookLayer { surface: self.extras_surface.clone(), offset: ((l.pill_w - l.extras_w) as f32, 0.0), size: (l.extras_w as f32, l.pill_h as f32) });
+        }
         if l.compact {
             // The circle only: the scrolling title lies outside it.
         } else if let Ok(o) = layer.marquee.Offset() {
@@ -1044,7 +1166,7 @@ fn paint_layer(
         layer.root.SetOffset(windows_numerics::Vector3 { X: 0.0, Y: 0.0, Z: 0.0 })?;
         layer.width = w;
     } else if layer.width != w {
-        follow(c, props, &layer.root, "Offset", "Vector3((p.W - lw) / 2, 0, 0)", &[("lw", w)])?;
+        follow(c, props, &layer.root, "Offset", "Vector3((p.W - p.E - lw) / 2, 0, 0)", &[("lw", w)])?;
         layer.width = w;
     }
     layer.content.SetSize(Vector2 { X: w, Y: h })?;
@@ -1176,6 +1298,66 @@ pub fn paint_pill_content(ink: &Ink, c: &PillContent, w: f32, h: f32, s: &Scale)
         PillContent::App { title, text, status, icon, ring, .. } => paint_app(ink, c, icon.as_ref(), (title, text), status, *ring, w, h, s),
         PillContent::BudsOffer { title, offer, art } => paint_buds_offer(ink, title, *offer, art.as_ref(), w, h, s),
     }
+}
+
+/// `paint` moved `dx` right, kept inside `clip` (in its own coordinates).
+fn shifted(ink: &Ink, dx: f32, clip: D2D_RECT_F, paint: impl FnOnce(&Ink) -> Result<()>) -> Result<()> {
+    let mut saved = windows_numerics::Matrix3x2::default();
+    unsafe {
+        ink.dc.GetTransform(&mut saved);
+        ink.dc.SetTransform(&windows_numerics::Matrix3x2 { M31: saved.M31 + dx, ..saved });
+        ink.dc.PushAxisAlignedClip(&clip, windows::Win32::Graphics::Direct2D::D2D1_ANTIALIAS_MODE_ALIASED);
+    }
+    let painted = paint(ink);
+    unsafe {
+        ink.dc.PopAxisAlignedClip();
+        ink.dc.SetTransform(&saved);
+    }
+    painted
+}
+
+/// The second event (its own pill's look at [`SECOND_DIP`], after a thin divider) and the icons
+/// after it: each one's circle as its pill draws it.
+pub fn paint_extras(ink: &Ink, second: Option<&PillContent>, icons: &[PillContent], h: f32, s: &Scale) -> Result<()> {
+    let d = |v: f32| v * s.0;
+    let mut x = 0.0;
+    if let Some(c) = second {
+        let w = d(SECOND_DIP);
+        ink.rrect(rect(0.0, (h * 0.25).round(), d(1.0).max(1.0), (h * 0.5).round()), 0.0, white(0.18))?;
+        shifted(ink, d(2.0), rect(0.0, 0.0, w - d(2.0), h), |ink| match c {
+            PillContent::Media(m) => paint_media_brief(ink, m, w - d(2.0), h, s),
+            _ => paint_pill_content(ink, c, w - d(2.0), h, s),
+        })?;
+        x = w;
+    }
+    let side = d(24.0);
+    for c in icons {
+        // Its circle sits 4 DIP in from its pill's left edge.
+        let circle = rect(d(4.0), ((h - side) / 2.0).round(), side, side);
+        let w = c.base_width_dip() * s.0;
+        shifted(ink, x + d(2.0), circle, |ink| match c {
+            PillContent::Media(m) => paint_media(ink, m, w, h, s),
+            _ => paint_pill_content(ink, c, w, h, s),
+        })?;
+        x += d(ICON_STEP_DIP);
+    }
+    Ok(())
+}
+
+/// Media beside the front event: the art circle, the title and " · artist", no buttons.
+fn paint_media_brief(ink: &Ink, m: &MediaSnapshot, w: f32, h: f32, s: &Scale) -> Result<()> {
+    let d = |v: f32| v * s.0;
+    let side = d(24.0);
+    shifted(ink, 0.0, rect(d(4.0), ((h - side) / 2.0).round(), side, side), |ink| paint_media(ink, m, w, h, s))?;
+    let title = TextStyle::new(Face::Text, Weight::SemiBold, d(12.5), white(1.0)).ellipsis();
+    let room = w - d(36.0) - d(10.0);
+    let title_w = ink.measure(&m.title, &title)?.min(room);
+    ink.text(&m.title, rect(d(36.0), 0.0, title_w + d(2.0), h), &title)?;
+    if !m.artist.is_empty() && room - title_w > d(30.0) {
+        let rest = TextStyle::new(Face::Text, Weight::Regular, d(12.5), white(0.7)).ellipsis();
+        ink.text(&format!(" · {}", m.artist), rect(d(36.0) + title_w, 0.0, room - title_w, h), &rest)?;
+    }
+    Ok(())
 }
 
 /// The clock, the date, and on the right the weather's symbol and temperature.
@@ -2026,23 +2208,26 @@ mod tests {
     #[test]
     fn a_screenshots_pill_fits_its_size() {
         let shot = PillContent::Capture { thumb: None, size: "1920×1080".into() };
-        assert_eq!(shot.width_dip(), 260.0);
+        assert_eq!(shot.base_width_dip(), 260.0);
         assert!(!shot.has_accent_gradient() || shot.accent() == timer_accent());
     }
 
     #[test]
     fn claudes_pill_has_room_for_its_step() {
         let live = |claude| PillContent::Live { key: 1, title: "pebbly".into(), status: "3:12".into(), claude, state: LiveState::Run, action: String::new() };
-        assert_eq!(live(true).width_dip(), 300.0, "the project and \"Düzenliyor: app.rs\"");
-        assert_eq!(live(false).width_dip(), 220.0);
+        assert_eq!(live(true).base_width_dip(), 300.0, "the project and \"Düzenliyor: app.rs\"");
+        assert_eq!(live(false).base_width_dip(), 220.0);
+        // The width setting scales it.
+        assert_eq!(live(false).width_dip(), (220.0 * crate::settings::current().pill_width_pct as f32 / 100.0).round());
     }
 
     #[test]
     fn the_drop_hint_keeps_a_wider_pills_width() {
         let shelf = |min_width_dip| PillContent::Shelf { label: "a.txt".into(), count: 1, thumbs: vec![], drop_hint: true, min_width_dip };
         assert_eq!(shelf(300.0).width_dip(), 300.0, "over the media pill the hint stays 300 DIP, so the cursor stays on it");
-        assert_eq!(shelf(176.0).width_dip(), 200.0);
-        assert_eq!(shelf(0.0).width_dip(), 200.0);
+        let k = crate::settings::current().pill_width_pct as f32 / 100.0;
+        assert_eq!(shelf(176.0).width_dip(), (200.0 * k).round().max(176.0));
+        assert_eq!(shelf(0.0).width_dip(), (200.0 * k).round());
     }
 
     #[test]
@@ -2139,6 +2324,19 @@ mod tests {
     /// No room on the taskbar: the pill keeps only its circle. Every pill's circle is 24 DIP at
     /// 4 DIP from its left, so a pill as wide as it is tall, painted at its full width and cut
     /// at its own, shows the circle with 4 DIP all round.
+    #[test]
+    fn extras_give_way_icons_first_then_the_second() {
+        let all = Extras { second: true, icons: 2, slivers: false };
+        assert_eq!(all.dip(), SECOND_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP);
+        let a = all.less().unwrap();
+        assert_eq!((a.second, a.icons), (true, 0));
+        let b = a.less().unwrap();
+        assert_eq!((b.second, b.icons, b.dip()), (false, 0, 0.0));
+        assert!(b.less().is_none());
+        // Both fit in the frame at the widest setting.
+        assert!(Extras::MOST_DIP >= all.dip());
+    }
+
     #[test]
     fn compact_pill_is_its_circle() {
         let s = Scale(1.25);

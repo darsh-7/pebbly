@@ -105,7 +105,7 @@ use crate::render::gfx::{is_device_lost, Gfx};
 use crate::render::layout::{card_rect, fit_pill, frame_x, lerp_rect, pill_fit, pill_rect, RectPx, Scale, TaskbarInfo};
 use crate::render::morph::{Morph, SHADOW_BLUR_DIP, SHADOW_DY_DIP};
 use crate::render::motion::{speed_factor, spring_at, SPRING_DURATION_S};
-use crate::render::pill::{layout_for, waveform_levels, PillButton, PillContent, PillLayout, PillVisual, MAX_SLIVERS, PILL_H_DIP, SLIVER_STEP_DIP};
+use crate::render::pill::{layout_for, waveform_levels, Extras, PillButton, PillContent, PillLayout, PillVisual, MAX_SLIVERS, PILL_H_DIP, SLIVER_STEP_DIP};
 
 /// Widest and tallest card (370 DIP; a full Now Brief, screen time included, is 566 tall); the
 /// card window is that plus shadow room and never resizes.
@@ -166,6 +166,8 @@ const MUSIC_SAVE_MS: u64 = 300_000;
 const TIMER_CARET: usize = 18;
 /// The Buds' case opened: the offer to connect, unless they came by themselves meanwhile.
 const TIMER_BUDS_OFFER: usize = 19;
+/// The pointer has rested on the pill for the setting's time: its card opens.
+const TIMER_HOVER_OPEN: usize = 20;
 const CARET_BLINK_MS: u32 = 530;
 /// Characters a line of the question card's answer holds, about (13.5 px over 330 DIP; a little
 /// short, so the area is rather too tall than cut).
@@ -651,6 +653,8 @@ pub struct App {
     main: MainWindow,
     front: Option<PillContent>,
     stack: Vec<ActivityKind>,
+    /// What the pill's second event and icons are (a click on one brings it to the front).
+    behind_kinds: Vec<ActivityKind>,
     user_front: Option<(ActivityKind, u64)>,
     card_state: CardState,
     open: Option<OpenCard>,
@@ -965,6 +969,7 @@ impl App {
             main,
             front: None,
             stack: Vec::new(),
+            behind_kinds: Vec::new(),
             user_front: None,
             card_state: CardState::Closed,
             open: None,
@@ -1248,7 +1253,7 @@ impl App {
         let home = Self::pill_home(&self.ui.info, s, width_dip);
         let circle = Self::pill_home(&self.ui.info, s, PILL_H_DIP);
         let circle = RectPx { w: circle.h, ..circle };
-        let tail = if settings::current().pill_slivers { s.px(SLIVER_STEP_DIP * MAX_SLIVERS as f32) as i32 } else { 0 };
+        let tail = if settings::current().pill_slivers && !settings::current().pill_icons { s.px(SLIVER_STEP_DIP * MAX_SLIVERS as f32) as i32 } else { 0 };
         fit_pill(home, circle, tail, self.ui.scale.px(ITEM_GAP_DIP) as i32, &self.ui.info, &self.taskbar_items)
     }
 
@@ -1871,7 +1876,7 @@ impl App {
             OpenCard::Activity(ActivityKind::Game(key)) => self.game_card(key, now).map(|c| CardContent::Game(Box::new(c))),
             OpenCard::Activity(ActivityKind::Clock | ActivityKind::Weather) => self.weather_card().map(|c| CardContent::Weather(Box::new(c))),
             OpenCard::Activity(ActivityKind::Live(key)) => self.live.get(key).map(|i| {
-                if i.claude {
+                if i.agent() {
                     return CardContent::Claude(Box::new(self.claude_card(i, now)));
                 }
                 if let Some(app) = &i.app {
@@ -1885,6 +1890,7 @@ impl App {
                     progress: i.progress,
                     claude: i.claude,
                     state: i.state,
+                    watch: i.id.starts_with("watch:"),
                 })
             }),
         }
@@ -2077,6 +2083,7 @@ impl App {
             summary: i.info.summary.clone(),
             ask: i.info.ask.as_ref().map(|a| ClaudeAsk { key: live_key(&a.id), tool: a.tool.clone(), detail: a.detail.clone(), answerable: asks_on && !a.id.is_empty() }),
             can_focus: i.info.window.is_some_and(|w| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(HWND(w as *mut _))) }.as_bool()),
+            agy: !i.claude,
         }
     }
 
@@ -2407,16 +2414,26 @@ impl App {
                 self.front = Some(front);
             }
             Some(front) => {
-                let (pill, compact) = self.pill_at(front.width_dip()).unwrap_or_else(|| (Self::pill_home(&self.ui.info, &self.ui.pill_scale, front.width_dip()), false));
-                let front_changed = self.front.as_ref() != Some(&front);
-                let behind: Vec<PillContent> = if settings::current().pill_slivers {
+                let s = settings::current();
+                let (kinds, behind): (Vec<ActivityKind>, Vec<PillContent>) = if (s.pill_slivers || s.pill_second) && !hint {
                     // `get`: a file drag shows the shelf's pill even with nothing in the stack.
-                    self.stack.get(1..).unwrap_or(&[]).iter().filter_map(|k| self.pill_content(*k, now)).collect()
+                    self.stack.get(1..).unwrap_or(&[]).iter().filter_map(|k| self.pill_content(*k, now).map(|c| (*k, c))).unzip()
                 } else {
-                    Vec::new()
+                    Default::default()
                 };
+                // The most that fits beside the taskbar's buttons: less before the circle only.
+                let mut ex = Extras::wanted(behind.len());
+                let placed = loop {
+                    match (self.pill_at(front.width_dip() + ex.dip()), ex.less()) {
+                        (Some((_, true)) | None, Some(less)) => ex = less,
+                        (at, _) => break at,
+                    }
+                };
+                let (pill, compact) = placed.unwrap_or_else(|| (Self::pill_home(&self.ui.info, &self.ui.pill_scale, front.width_dip() + ex.dip()), false));
+                self.behind_kinds = kinds;
+                let front_changed = self.front.as_ref() != Some(&front);
                 let fade = self.front.as_ref().is_some_and(|f| !f.same_kind(&front));
-                self.ui.pill_layout = self.ui.pill.show(&self.gfx, &front, &behind, &self.ui.pill_scale, fade, compact)?;
+                self.ui.pill_layout = self.ui.pill.show(&self.gfx, &front, &behind, ex, &self.ui.pill_scale, fade, compact)?;
                 // A lyric line that doesn't fit scrolls with the singing.
                 let sung = match self.stack.first() {
                     Some(ActivityKind::Media(id)) if !hint => self.media_of(*id).and_then(|m| self.pill_lyrics_at(m)).and_then(|(lines, pos)| lyrics::sung(lines, pos)),
@@ -2856,6 +2873,19 @@ impl App {
             CardAction::StopwatchClose => self.stopwatch = None,
             CardAction::ClaudeAllow(painted) => self.answer_claude(true, painted),
             CardAction::ClaudeDeny(painted) => self.answer_claude(false, painted),
+            CardAction::OpenSettings => {
+                let page = match self.open {
+                    Some(OpenCard::Activity(ActivityKind::Live(key))) if self.live.get(key).is_some_and(|i| i.id.starts_with("watch:")) => 13,
+                    Some(OpenCard::Activity(kind)) => crate::activities::settings_page_for(kind),
+                    _ => 0,
+                };
+                open_settings_at(Some(page));
+                return self.close_card();
+            }
+            CardAction::TaskManager => {
+                let _ = std::process::Command::new("taskmgr.exe").spawn();
+                return self.close_card();
+            }
             CardAction::ClaudeFocus => {
                 self.focus_claude();
                 return self.close_card();
@@ -4241,6 +4271,13 @@ impl App {
                     (_, Some(PillButton::Prev)) => self.media_command(MediaCommand::Prev),
                     (_, Some(PillButton::PlayPause)) => self.media_command(MediaCommand::PlayPause),
                     (_, Some(PillButton::Next)) => self.media_command(MediaCommand::Next),
+                    (_, Some(PillButton::Behind(i))) => match self.behind_kinds.get(i as usize) {
+                        Some(kind) => {
+                            self.user_front = Some((*kind, now_ms()));
+                            self.refresh()
+                        }
+                        None => Ok(()),
+                    },
                     // The idle clock's card is the day's brief (the weather is in it).
                     (Some(ActivityKind::Clock), None) => self.toggle_card(OpenCard::Brief, true),
                     (Some(ActivityKind::Usage), None) => self.toggle_card(OpenCard::Wellbeing, true),
@@ -4456,9 +4493,28 @@ impl App {
             }
             UiEvent::EffectsChanged => self.ui.morph.set_blur(effects_enabled()),
             UiEvent::Timer(TIMER_OUTSIDE) if !self.card_pinned && self.clicked_outside() => self.close_card(),
+            UiEvent::Timer(TIMER_HOVER_OPEN) => {
+                unsafe {
+                    let _ = KillTimer(Some(self.main.hwnd), TIMER_HOVER_OPEN);
+                }
+                // Still resting there, nothing out, no button pressed: as a click on the pill's
+                // body (never a transfer's dialog, which a click opens).
+                let pressed = [VK_LBUTTON, VK_RBUTTON].iter().any(|k| unsafe { GetAsyncKeyState(k.0 as i32) } as u16 & 0x8000 != 0);
+                if self.pill_hover && self.card_state == CardState::Closed && !pressed && self.front_kind().is_some_and(|k| k != ActivityKind::Transfer) {
+                    return self.try_handle(UiEvent::Pill(PillEvent::Click { x: -1 }));
+                }
+                Ok(())
+            }
             UiEvent::Pill(PillEvent::Hover(over)) | UiEvent::Card(CardEvent::Hover(over)) => {
                 if matches!(e, UiEvent::Pill(_)) {
                     self.pill_hover = over;
+                    let ds = settings::current().hover_open_ds;
+                    unsafe {
+                        let _ = KillTimer(Some(self.main.hwnd), TIMER_HOVER_OPEN);
+                        if over && ds > 0 && self.card_state == CardState::Closed {
+                            SetTimer(Some(self.main.hwnd), TIMER_HOVER_OPEN, ds * 100, None);
+                        }
+                    }
                 } else {
                     self.card_hover = over;
                 }

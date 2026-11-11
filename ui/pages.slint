@@ -17,6 +17,10 @@ global Fmt {
         let s = round(v);
         return s < 60 ? @tr("{} sn", s) : Math.mod(s, 60) == 0 ? @tr("{} dk", s / 60) : @tr("{} dk {} sn", floor(s / 60), Math.mod(s, 60));
     }
+    public pure function tenths(v: float) -> string {
+        let t = round(v);
+        return @tr("{},{} sn", floor(t / 10), Math.mod(t, 10));
+    }
     public pure function minutes(v: float) -> string {
         let m = round(v);
         return m == 0 ? @tr("Hemen") : m >= 60 && Math.mod(m, 60) == 0 ? @tr("{} sa", m / 60) : m >= 60 ? @tr("{} sa {} dk", floor(m / 60), Math.mod(m, 60)) : @tr("{} dk", m);
@@ -292,10 +296,51 @@ export component AppearanceInspector inherits VerticalLayout {
             }
         }
         IRow {
+            label: @tr("Genişlik");
+            note: @tr("Daha geniş pil, daha çok yazı");
+            MiniSlider {
+                value <=> Store.pill-width;
+                minimum: 100;
+                maximum: 160;
+                step: 5;
+                text: Fmt.pct(Store.pill-width);
+                moved => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("İki etkinlik birden");
+            note: @tr("Sıradaki etkinlik öndekinin yanında");
+            Toggle {
+                checked <=> Store.pill-second;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
             label: @tr("Arkadakileri göster");
             Toggle {
                 checked <=> Store.pill-slivers;
                 toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Simge olarak");
+            note: @tr("Arkadaki iki etkinliğin simgesi; kapalıyken şeritler");
+            Toggle {
+                checked <=> Store.pill-icons;
+                enabled: Store.pill-slivers;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
+            label: @tr("Üzerinde durunca aç");
+            note: @tr("İmleç pilde bekleyince kartı açılır");
+            MiniSlider {
+                value <=> Store.hover-open;
+                minimum: 0;
+                maximum: 30;
+                step: 1;
+                text: Store.hover-open < 0.5 ? @tr("Kapalı") : Fmt.tenths(Store.hover-open);
+                moved => { Ui.changed(); }
             }
         }
     }
@@ -2479,6 +2524,18 @@ export component PcBody inherits VerticalLayout {
         }
         Tag { text: Store.info-glance-on ? @tr("Açık") : @tr("Kapalı"); }
     }
+    LRow {
+        title: @tr("İnternet");
+        sub: Store.net-on ? @tr("kesilince ve gelince") : @tr("kapalı");
+        clickable: true;
+        lead: 1;
+        glyph: "\u{E701}";
+        clicked => {
+            Store.net-on = !Store.net-on;
+            Ui.changed();
+        }
+        Tag { text: Store.net-on ? @tr("Açık") : @tr("Kapalı"); }
+    }
 }
 
 export component PcInspector inherits VerticalLayout {
@@ -2589,6 +2646,17 @@ export component PcInspector inherits VerticalLayout {
                 enabled: Store.info-glance-on;
                 text: Fmt.seconds(Store.info-glance-s);
                 moved => { Ui.changed(); }
+            }
+        }
+    }
+    ISection {
+        title: @tr("İnternet");
+        IRow {
+            label: @tr("Kesilince göster");
+            note: @tr("Bağlantı gidince pil öne gelir, gelince söyler");
+            Toggle {
+                checked <=> Store.net-on;
+                toggled => { Ui.changed(); }
             }
         }
     }

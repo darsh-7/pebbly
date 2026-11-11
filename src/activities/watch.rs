@@ -15,7 +15,7 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Whether the settings want the thread.
 fn wanted(s: &settings::Settings) -> bool {
-    s.enabled && (s.health_on || s.info_glance_on)
+    s.enabled && (s.health_on || s.info_glance_on || s.net_on)
 }
 
 /// Starts the thread when health or the glance was turned on (it ends by itself once both are off).
@@ -44,6 +44,8 @@ fn run() {
     let mut next_glance = Instant::now() + FIRST_GLANCE;
     // The glance on screen now: when it goes.
     let mut glance_until: Option<Instant> = None;
+    let mut net = Limit::default();
+    let started = Instant::now();
     loop {
         let s = settings::current();
         if !wanted(&s) {
@@ -69,6 +71,19 @@ fn run() {
             }
             next_glance = now + Duration::from_secs(s.info_glance_every_min as u64 * 60);
         }
+        if s.net_on {
+            // Offline for 10 s raises; any internet lowers. Unknown (None) is left alone.
+            if let Some(online) = online() {
+                match net.step(!online, online, started.elapsed().as_secs(), 10) {
+                    Change::Raised => send(msg("net", tr("İnternet").into(), tr("Bağlantı yok").into(), LiveState::Wait)),
+                    Change::Lowered => send(msg("net", tr("İnternet").into(), tr("Bağlantı geri geldi").into(), LiveState::Done)),
+                    Change::Same => {}
+                }
+            }
+        } else if net.raised {
+            net = Limit::default();
+            send(msg("net", String::new(), String::new(), LiveState::Clear));
+        }
         // Wakes often enough to follow the settings, sleeps the rest.
         std::thread::sleep(Duration::from_secs(1));
     }
@@ -78,6 +93,34 @@ fn run() {
     }
     RUNNING.store(false, Ordering::SeqCst);
     log("watch: stopped");
+}
+
+/// Windows' own idea of the internet (NLM's hint: no probe of ours goes out); None when unknown.
+fn online() -> Option<bool> {
+    // ponytail: declared here, not through the `windows` crate's WinSock feature (a whole-crate rebuild).
+    #[repr(C)]
+    #[derive(Default)]
+    struct Hint {
+        level: i32,
+        cost: i32,
+        approaching: u8,
+        over: u8,
+        roaming: u8,
+    }
+    #[link(name = "iphlpapi")]
+    unsafe extern "system" {
+        fn GetNetworkConnectivityHint(hint: *mut Hint) -> u32;
+    }
+    let mut h = Hint::default();
+    if unsafe { GetNetworkConnectivityHint(&mut h) } != 0 {
+        return None;
+    }
+    // 1 none, 2 local only, 3 internet, 4 constrained (a captive portal), 0/5 unknown or hidden.
+    match h.level {
+        1 | 2 => Some(false),
+        3 | 4 => Some(true),
+        _ => None,
+    }
 }
 
 /// One limit, with hysteresis: over it for `for_s` seconds raises, back under `clear` lowers.

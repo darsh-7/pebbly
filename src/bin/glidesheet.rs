@@ -241,7 +241,7 @@ fn main() -> Result<()> {
         println!("{phase}: {n} buttons, pill at {:?}", at.map(|(r, compact)| (r.x - bar_r.x, r.y - bar_r.y, r.w, r.h, compact)));
         match at {
             Some((r, compact)) => {
-                let l = pill.show(&g, front, &[], &ps, fade, compact)?;
+                let l = pill.show(&g, front, &[], Default::default(), &ps, fade, compact)?;
                 window.place(r, l.frame_w, l.radius, window.shown())?;
                 window.set_visible(true);
             }

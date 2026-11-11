@@ -205,7 +205,11 @@ fn agy_hook(event: &str) {
     use std::io::Read;
     let mut text = String::new();
     let _ = std::io::stdin().take(1 << 20).read_to_string(&mut text);
-    let Ok(hook) = serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')) else { return };
+    let Ok(mut hook) = serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')) else { return };
+    if event == "PreInvocation" {
+        let window = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+        hook["pebbly_window"] = serde_json::json!(window.0 as i64);
+    }
     if let Some(msg) = pebbly::activities::live::agy_msg(event, &hook) {
         ipc::send(&ipc::fitted(Command::Live(Box::new(msg))));
     }

@@ -79,7 +79,7 @@ impl Island {
     /// after that a change of content is the pill's own (width spring, cross-fade).
     pub fn show(&mut self, g: &Gfx, front: &PillContent, s: &Scale, monitor: RectPx) -> Result<()> {
         let fade = self.shown.as_ref().is_some_and(|f| !f.same_kind(front));
-        let l = self.pill.show(g, front, &[], s, fade, false)?;
+        let l = self.pill.show(g, front, &[], super::pill::Extras::default(), s, fade, false)?;
         let top = s.px(TOP_DIP) as i32;
         // From the screen's edge down to the pill's bottom: the pill comes into it from above.
         let r = RectPx { x: monitor.x + (monitor.w - l.frame_w) / 2, y: monitor.y, w: l.frame_w, h: top + l.pill_h };

@@ -130,6 +130,11 @@ pub const INDEX: &[Entry] = &[
     e(12, "agy-on", n_("Antigravity"), n_("Antigravity ajanları"), n_("Antigravity'nin ajanları Claude Code gibi pilde: adım, dosya, bitince"), "antigravity google gemini ajan agent ide yapay zeka"),
     e(12, "live-done-keep", n_("Claude Code"), n_("Biten kalsın"), n_("Biten bir oturum pilde bu kadar kalır"), "bitti süre claude kalsın"),
     e(13, "health-on", n_("Bilgisayar sağlığı"), n_("Sorun olunca göster"), n_("İşlemci ya da bellek uzun süre yüksek kalınca, C: dolunca pil öne gelir"), "işlemci cpu bellek ram disk c: dolu yavaş sağlık"),
+    e(13, "net-on", n_("İnternet"), n_("Kesilince göster"), n_("Bağlantı gidince pil öne gelir, gelince söyler"), "internet ağ wifi bağlantı kesildi network offline"),
+    e(0, "pill-width", n_("Pil"), n_("Genişlik"), n_("Daha geniş pil, daha çok yazı"), "genişlik geniş boyut yazı width"),
+    e(0, "pill-second", n_("Pil"), n_("İki etkinlik birden"), n_("Sıradaki etkinlik öndekinin yanında"), "iki etkinlik ikinci yan yana çift"),
+    e(0, "pill-icons", n_("Pil"), n_("Simge olarak"), n_("Arkadaki iki etkinliğin simgesi; kapalıyken şeritler"), "simge ikon arka şerit"),
+    e(0, "hover-open", n_("Pil"), n_("Üzerinde durunca aç"), n_("İmleç pilde bekleyince kartı açılır"), "üzerinde bekle hover aç kart"),
     e(13, "info-glance-on", n_("Genel bilgi"), n_("Arada bir göster"), n_("Arada bir işlemci, bellek, boş yer ve açık kalma süresi birkaç saniye pilde"), "genel bilgi özet istatistik cpu ram uptime ara sıra"),
 ];
 

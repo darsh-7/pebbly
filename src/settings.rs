@@ -172,6 +172,14 @@ pub struct Settings {
     pub pill_size: PillSize,
     pub pill_opacity_pct: u8,
     pub pill_slivers: bool,
+    /// The pill's width, % of its usual (more room for the text).
+    pub pill_width_pct: u32,
+    /// The next event in the stack shows beside the front one, in the same pill.
+    pub pill_second: bool,
+    /// What's behind shows as up to two icons at the pill's end (off: the slivers).
+    pub pill_icons: bool,
+    /// The pointer resting on the pill this long (tenths of a second) opens its card; 0 = off.
+    pub hover_open_ds: u32,
     pub card_size: CardSize,
     pub card_blur: bool,
     pub material_darkness_pct: u8,
@@ -223,6 +231,8 @@ pub struct Settings {
     pub info_glance_on: bool,
     pub info_glance_every_min: u32,
     pub info_glance_s: u32,
+    /// The internet dropping (and coming back) shows in the pill.
+    pub net_on: bool,
     // Yapay zekâ ajanları
     /// Antigravity's agents show like Claude Code's sessions (Pebbly's hooks in
     /// ~/.gemini/config/hooks.json while on).
@@ -370,6 +380,10 @@ impl Default for Settings {
             pill_size: PillSize::Standard,
             pill_opacity_pct: 92,
             pill_slivers: true,
+            pill_width_pct: 120,
+            pill_second: true,
+            pill_icons: true,
+            hover_open_ds: 8,
             card_size: CardSize::Large,
             card_blur: true,
             material_darkness_pct: 35,
@@ -406,6 +420,7 @@ impl Default for Settings {
             info_glance_on: true,
             info_glance_every_min: 30,
             info_glance_s: 8,
+            net_on: true,
             agy_on: true,
             media_hidden_apps: Vec::new(),
             media_paused_keep_min: 10,
@@ -497,6 +512,8 @@ impl Settings {
         self.health_every_s = self.health_every_s.clamp(2, 60);
         self.info_glance_every_min = self.info_glance_every_min.clamp(5, 240);
         self.info_glance_s = self.info_glance_s.clamp(3, 30);
+        self.pill_width_pct = self.pill_width_pct.clamp(100, 160);
+        self.hover_open_ds = self.hover_open_ds.min(30);
         self.pill_opacity_pct = self.pill_opacity_pct.clamp(70, 100);
         self.material_darkness_pct = self.material_darkness_pct.clamp(10, 60);
         self.material_saturation_pct = self.material_saturation_pct.clamp(100, 250);

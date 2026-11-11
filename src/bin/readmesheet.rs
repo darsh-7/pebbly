@@ -271,6 +271,7 @@ fn main() -> Result<()> {
         summary: None,
         ask: Some(ClaudeAsk { key: 7, tool: "Bash".into(), detail: "cargo build --profile quick --bin pebbly".into(), answerable: true }),
         can_focus: true,
+        agy: false,
     };
     sheet.card("card-claude", &CardContent::Claude(Box::new(claude)), &s)?;
     sheet.card(

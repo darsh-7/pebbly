@@ -77,7 +77,7 @@ pub struct Frame {
 /// `content` drawn at `scale` on a transparent ground.
 pub fn frame(content: &PillContent, scale: f32) -> Result<Frame> {
     let s = Scale(scale);
-    let (w, h) = (s.even_px(content.width_dip()), s.px(32.0).round());
+    let (w, h) = (s.even_px(content.base_width_dip()), s.px(32.0).round());
     let px = render(w as u32, h as u32, [0.0; 4], |ink| paint_pill_content(ink, content, w, h, &s))?;
     let (top, bottom) = content.base();
     let c = |c: windows::UI::Color| [c.R, c.G, c.B, c.A];
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn the_stage_takes_every_pill_at_full_size() {
-        let widths: Vec<f32> = pills().iter().map(PillContent::width_dip).collect();
+        let widths: Vec<f32> = pills().iter().map(PillContent::base_width_dip).collect();
         assert!(widths.iter().all(|w| *w <= 300.0), "{widths:?}: the setup's stage shows 300 DIP at full size");
     }
 }

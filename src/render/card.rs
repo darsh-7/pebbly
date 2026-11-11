@@ -13,7 +13,7 @@ mod buds;
 pub use buds::{bud_art, buds_pages, BudsCard, BudsPage};
 use super::color::media_gradient;
 use super::pill::{
-    alert_style, lighten, paint_app_icon, paint_live_mark, store_accent, timer_accent, BUDS_ACCENT, CLAUDE_ACCENT, CLAUDE_ICON, LOW_ACCENT, RAIN_ACCENT, RAIN_ICON, SNOW_ACCENT, SNOW_ICON,
+    alert_style, lighten, paint_app_icon, paint_live_mark, store_accent, timer_accent, AGY_ACCENT, BUDS_ACCENT, CLAUDE_ACCENT, CLAUDE_ICON, LOW_ACCENT, RAIN_ACCENT, RAIN_ICON, SNOW_ACCENT, SNOW_ICON,
     WELLBEING_ACCENT, WELLBEING_GLYPH,
 };
 use crate::activities::away::AwayKind;
@@ -540,6 +540,8 @@ pub struct LiveCard {
     pub progress: Option<u8>,
     pub claude: bool,
     pub state: LiveState,
+    /// The PC's own item (health, the glance, the internet): Task Manager beside the gear.
+    pub watch: bool,
 }
 
 /// A Claude Code session's card: what it does, the task list, what it asks or said at the end.
@@ -560,6 +562,8 @@ pub struct ClaudeCard {
     pub ask: Option<ClaudeAsk>,
     /// The window the prompt came from is known: "Pencereye git".
     pub can_focus: bool,
+    /// An Antigravity agent, not Claude: its own mark and colour.
+    pub agy: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -683,6 +687,9 @@ pub struct MatchCard {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CardAction {
+    /// The gear: this event's page of the settings.
+    OpenSettings,
+    TaskManager,
     TimerPause,
     TimerResume,
     TimerClose,
@@ -898,6 +905,7 @@ pub fn card_accent(c: &CardContent) -> (u8, u8, u8) {
     match c {
         CardContent::Timer(_) | CardContent::Stopwatch(_) | CardContent::Picker(_) | CardContent::Shelf(_) | CardContent::Away(_) => timer_accent(),
         CardContent::Live(l) if l.claude => CLAUDE_ACCENT,
+        CardContent::Claude(c) if c.agy => AGY_ACCENT,
         CardContent::Claude(_) | CardContent::Question(_) => CLAUDE_ACCENT,
         CardContent::App(a) => a.accent,
         CardContent::Live(_) => timer_accent(),
@@ -1133,13 +1141,16 @@ impl Painter<'_, '_> {
     /// list, or the last answer; a footer with "Pencereye git" and the ask's buttons.
     fn claude(&mut self, c: &ClaudeCard) -> Result<()> {
         let d = |v: f32| v * self.s.0;
-        let (r, g, b) = CLAUDE_ACCENT;
+        let (r, g, b) = if c.agy { AGY_ACCENT } else { CLAUDE_ACCENT };
         let circle = d(40.0).round();
         let dot = rect(d(20.0).round(), d(18.0).round(), circle, circle);
         self.ink.rrect(dot, circle / 2.0, rgba(r, g, b, 1.0))?;
-        paint_live_mark(self.ink, dot, true, c.state, d(20.0))?;
+        paint_live_mark(self.ink, dot, !c.agy, c.state, d(20.0))?;
         let text_x = d(72.0);
-        let text_w = self.w - text_x - d(60.0);
+        let text_w = self.w - text_x - d(100.0);
+        let gear = rect(self.w - d(94.0), d(18.0), d(40.0), d(40.0));
+        self.ink.text(&glyph(Icon::Settings).to_string(), gear, &TextStyle::new(Face::Icons, Weight::Regular, d(15.0), white(0.8)).centered())?;
+        self.hits.push((gear, CardAction::OpenSettings));
         let title = TextStyle::new(Face::Text, Weight::SemiBold, d(16.0), white(1.0)).top().ellipsis();
         self.ink.text(&c.title, rect(text_x, d(17.0), text_w, d(22.0)), &title)?;
         let status = match c.state {
@@ -1350,9 +1361,13 @@ impl Painter<'_, '_> {
         self.ink.rrect(dot, circle / 2.0, rgba(r, g, b, 1.0))?;
         paint_live_mark(self.ink, dot, l.claude, l.state, self.d(24.0))?;
         self.icon_button(Icon::Close, 35.0, CardAction::LiveClose)?;
+        self.icon_button(Icon::Settings, 77.0, CardAction::OpenSettings)?;
+        if l.watch {
+            self.icon_button(Icon::Monitor, 119.0, CardAction::TaskManager)?;
+        }
         let status = TextStyle::new(Face::Text, Weight::Regular, self.d(13.0), white(0.7)).tabular().trailing();
         let status_w = self.ink.measure(&l.status, &status)? + self.d(1.0);
-        let right = self.w - self.d(62.0);
+        let right = self.w - self.d(if l.watch { 146.0 } else { 104.0 });
         self.ink.text(&l.status, rect(right - status_w, 0.0, status_w, self.h), &status)?;
         let text_w = right - status_w - self.d(12.0) - self.d(73.0);
         // With a bar the block moves up so the three stay centred.
@@ -2738,6 +2753,7 @@ mod tests {
             summary: None,
             ask: ask.then(|| ClaudeAsk { key: 7, tool: "Bash".into(), detail: "cargo build".into(), answerable: true }),
             can_focus: focus,
+            agy: false,
         }
     }
 

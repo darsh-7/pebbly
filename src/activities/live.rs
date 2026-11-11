@@ -385,7 +385,12 @@ pub fn agy_msg(event: &str, hook: &serde_json::Value) -> Option<LiveMsg> {
     let conversation = hook["conversationId"].as_str().filter(|s| !s.is_empty())?;
     let mut note = ClaudeNote::default();
     let (state, text) = match event {
-        "SessionStart" | "PreInvocation" => (LiveState::Run, tr("Düşünüyor").to_string()),
+        "SessionStart" | "PreInvocation" => {
+            // A new prompt: the task list starts over, and its window is noted for "Pencereye git".
+            note.new_prompt = event == "PreInvocation";
+            note.window = hook["pebbly_window"].as_i64();
+            (LiveState::Run, tr("Düşünüyor").to_string())
+        }
         "PostToolUse" => {
             let (step, file) = agy_step(hook["toolCall"]["name"].as_str().unwrap_or(""), &hook["toolCall"]["args"]);
             let label = step_label(&step);

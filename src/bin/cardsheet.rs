@@ -184,6 +184,7 @@ fn claude_card(state: LiveState, thinking: bool, ask: bool, focus: bool) -> Clau
         summary: (state == LiveState::Done).then(|| "Raf artık ShareX'in ekran görüntülerini de alıyor; testler ve clippy temiz, Pebbly yeniden başladı.".to_string()),
         ask: ask.then(|| ClaudeAsk { key: 7, tool: "Bash".into(), detail: "cargo build --profile quick --bin pebbly --bin pebbly-settings".into(), answerable: true }),
         can_focus: focus,
+        agy: false,
     }
 }
 
@@ -408,7 +409,7 @@ fn main() -> Result<()> {
         CardContent::Claude(Box::new(claude_card(LiveState::Run, false, false, true))),
         CardContent::Claude(Box::new(claude_card(LiveState::Wait, false, true, true))),
         CardContent::Claude(Box::new(claude_card(LiveState::Done, false, false, true))),
-        CardContent::Live(LiveCard { key: 2, title: "cargo build --release".into(), text: "pebbly-settings derleniyor".into(), status: "%40".into(), progress: Some(40), claude: false, state: LiveState::Run }),
+        CardContent::Live(LiveCard { key: 2, title: "cargo build --release".into(), text: "pebbly-settings derleniyor".into(), status: "%40".into(), progress: Some(40), claude: false, state: LiveState::Run, watch: false }),
         app_card("Deploy hazır", "main dalı staging'e gönderilsin mi? Testler geçti, 3 commit.", "", None, Some(AppIcon::Glyph('\u{E8B7}')), &["Hayır", "Gönder"], false),
         app_card("Yedekleme", "Belgeler klasörü", "%40", Some(40), Some(AppIcon::Image { id: 1, src: swatch(s.px(40.0) as u32, [0x2F, 0x80, 0xED], [0x56, 0xCC, 0xF2]) }), &["Durdur"], false),
         app_card("Ekin", r"C:\Apps\Ekin\ekin.exe", "", None, Some(AppIcon::Image { id: 2, src: swatch(s.px(40.0) as u32, [0xF2, 0x99, 0x4A], [0xEB, 0x57, 0x57]) }), &[], true),

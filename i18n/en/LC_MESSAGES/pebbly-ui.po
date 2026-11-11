@@ -4117,3 +4117,63 @@ msgstr "How often"
 #: ui/pages.slint
 msgid "Pilde kalma"
 msgstr "Time in the pill"
+
+#: src/settings_ui.rs
+msgid "İnternet"
+msgstr "Internet"
+
+#: src/settings_ui.rs
+msgid "Kesilince göster"
+msgstr "Show when it drops"
+
+#: src/settings_ui.rs
+msgid "Bağlantı gidince pil öne gelir, gelince söyler"
+msgstr "Pops up when it drops"
+
+#: src/settings_ui.rs
+msgid "Genişlik"
+msgstr "Width"
+
+#: src/settings_ui.rs
+msgid "Daha geniş pil, daha çok yazı"
+msgstr "More room for text"
+
+#: src/settings_ui.rs
+msgid "İki etkinlik birden"
+msgstr "Two events at once"
+
+#: src/settings_ui.rs
+msgid "Sıradaki etkinlik öndekinin yanında"
+msgstr "The next event beside the front one"
+
+#: src/settings_ui.rs
+msgid "Simge olarak"
+msgstr "As icons"
+
+#: src/settings_ui.rs
+msgid "Arkadaki iki etkinliğin simgesi; kapalıyken şeritler"
+msgstr "Two icons; off: slivers"
+
+#: src/settings_ui.rs
+msgid "Üzerinde durunca aç"
+msgstr "Open on hover"
+
+#: src/settings_ui.rs
+msgid "İmleç pilde bekleyince kartı açılır"
+msgstr "Rest the pointer to open"
+
+#: src/activities/watch.rs
+msgid "Bağlantı yok"
+msgstr "No connection"
+
+#: src/activities/watch.rs
+msgid "Bağlantı geri geldi"
+msgstr "Back online"
+
+#: ui/pages.slint
+msgid "{},{} sn"
+msgstr "{}.{} s"
+
+#: ui/pages.slint
+msgid "kesilince ve gelince"
+msgstr "when it drops and comes back"

@@ -179,9 +179,23 @@ fn main() -> Result<()> {
         ("Raf · bırak (boş)", PillContent::Shelf { label: "Rafa bırak".into(), count: 0, thumbs: vec![], drop_hint: true, min_width_dip: 0.0 }),
         ("Raf · bırak (dolu)", PillContent::Shelf { label: "logo.png".into(), count: 3, thumbs: vec![thumb(&s, 1), thumb(&s, 0)], drop_hint: true, min_width_dip: 0.0 }),
     ];
+    // The pill with the next event beside it and the icons of two more (the settings' default).
+    let claude = PillContent::Live { key: 1, title: "pebbly".into(), status: "4:12".into(), claude: true, state: LiveState::Run, action: "Düzenliyor: app.rs".into() };
+    let agy = PillContent::Live { key: 5, title: "Antigravity · tapi".into(), status: "1:20".into(), claude: false, state: LiveState::Run, action: "Çalıştırıyor: npm test".into() };
+    let pc = PillContent::Live { key: 6, title: "Bilgisayar".into(), status: String::new(), claude: false, state: LiveState::Run, action: "CPU %12 · Bellek %71 · C: 84 GB · 3 sa 12 dk".into() };
+    let net = PillContent::Live { key: 7, title: "İnternet".into(), status: "Bağlantı yok".into(), claude: false, state: LiveState::Wait, action: String::new() };
+    let timer = PillContent::Timer { text: "04:59".into(), label: "", paused: false };
+    let mut rows: Vec<(&str, PillContent, Vec<PillContent>)> = pills.into_iter().map(|(l, c)| (l, c, Vec::new())).collect();
+    rows.insert(0, ("İki + 2 simge", claude.clone(), vec![song(None), timer.clone(), net.clone()]));
+    rows.insert(1, ("Antigravity + Claude", agy.clone(), vec![claude.clone(), pc.clone()]));
+    rows.insert(2, ("Medya + Claude izin", song(None), vec![PillContent::Live { key: 1, title: "pebbly".into(), status: "İzin istiyor".into(), claude: true, state: LiveState::Wait, action: "Bash".into() }, agy.clone()]));
+    rows.insert(3, ("Genel bilgi + zamanlayıcı", pc.clone(), vec![timer.clone()]));
+    rows.insert(4, ("Antigravity", agy, vec![]));
+    let pills = rows;
     let text = TextKit::new()?;
     let (pad, pill_h, row_h) = (24.0, s.px(32.0), s.px(40.0));
-    let (w, h) = (720.0 + 2.0 * pad, pad * 2.0 + pills.len() as f32 * (row_h + 8.0));
+    let row_w = 1160.0;
+    let (w, h) = (row_w + 2.0 * pad, pad * 2.0 + pills.len() as f32 * (row_h + 8.0));
     unsafe {
         let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
         let bmp = wic.CreateBitmap(w as u32, h as u32, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad)?;
@@ -200,17 +214,19 @@ fn main() -> Result<()> {
         dc.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
         dc.SetTextRenderingParams(&text.params);
         let ink = Ink { dc: &dc, text: &text };
-        for (i, (label, content)) in pills.iter().enumerate() {
+        for (i, (label, content, extras)) in pills.iter().enumerate() {
             let y = pad + i as f32 * (row_h + 8.0);
-            ink.rrect(rect(pad, y, 720.0, row_h), 6.0, rgba(0x20, 0x20, 0x20, 1.0))?;
+            ink.rrect(rect(pad, y, row_w, row_h), 6.0, rgba(0x20, 0x20, 0x20, 1.0))?;
             ink.text(label, rect(pad + 12.0, y, 180.0, row_h), &TextStyle::new(Face::Text, Weight::Regular, 13.0, white(0.7)))?;
             let pw = s.even_px(content.width_dip());
+            let ex = pebbly::render::pill::Extras { second: !extras.is_empty(), icons: extras.len().saturating_sub(1), slivers: false };
+            let ew = s.even_px(ex.dip());
             let (x, py) = (pad + 220.0, y + (row_h - pill_h) / 2.0);
             // The body: #121212 at 92 % and, for these pills, the accent sweeping in from the left.
             // The body as the pill paints it: its own colours top to bottom.
             let (top, bottom) = content.base();
             let f = |c: windows::UI::Color| [c.R as f32 / 255.0, c.G as f32 / 255.0, c.B as f32 / 255.0, c.A as f32 / 255.0];
-            ink.vgradient(rect(x, py, pw, pill_h), pill_h / 2.0, f(top), f(bottom))?;
+            ink.vgradient(rect(x, py, pw + ew, pill_h), pill_h / 2.0, f(top), f(bottom))?;
             if content.has_accent_gradient() {
                 let (r, g, b) = content.accent();
                 ink.hgradient(rect(x, py, pw / 2.0, pill_h), pill_h / 2.0, rgba(r, g, b, 0.38), rgba(r, g, b, 0.0))?;
@@ -223,9 +239,13 @@ fn main() -> Result<()> {
                 PillContent::Media(m) => paint_media_still(&ink, m, [0.55, 0.9, 0.7], pw, pill_h, &s)?,
                 _ => paint_pill_content(&ink, content, pw, pill_h, &s)?,
             }
+            if !extras.is_empty() {
+                dc.SetTransform(&windows_numerics::Matrix3x2 { M31: x + pw, M32: py, ..saved });
+                pebbly::render::pill::paint_extras(&ink, extras.first(), &extras[1..], pill_h, &s)?;
+            }
             dc.SetTransform(&saved);
             // Compact: the same paint cut at a circle as wide as the pill is tall.
-            let cx = pad + 720.0 - 12.0 - pill_h;
+            let cx = pad + row_w - 12.0 - pill_h;
             ink.vgradient(rect(cx, py, pill_h, pill_h), pill_h / 2.0, f(top), f(bottom))?;
             if content.has_accent_gradient() {
                 let (r, g, b) = content.accent();
