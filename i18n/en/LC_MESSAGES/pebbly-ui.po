@@ -4177,3 +4177,11 @@ msgstr "{}.{} s"
 #: ui/pages.slint
 msgid "kesilince ve gelince"
 msgstr "when it drops and comes back"
+
+#: src/settings_ui.rs
+msgid "Medya denetimi"
+msgstr "Media controls"
+
+#: src/settings_ui.rs
+msgid "Çalan medya kendi düğmeleriyle; > sonraki kaynak"
+msgstr "Its own buttons; > next source"

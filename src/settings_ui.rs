@@ -132,6 +132,7 @@ pub const INDEX: &[Entry] = &[
     e(13, "health-on", n_("Bilgisayar sağlığı"), n_("Sorun olunca göster"), n_("İşlemci ya da bellek uzun süre yüksek kalınca, C: dolunca pil öne gelir"), "işlemci cpu bellek ram disk c: dolu yavaş sağlık"),
     e(13, "net-on", n_("İnternet"), n_("Kesilince göster"), n_("Bağlantı gidince pil öne gelir, gelince söyler"), "internet ağ wifi bağlantı kesildi network offline"),
     e(0, "pill-width", n_("Pil"), n_("Genişlik"), n_("Daha geniş pil, daha çok yazı"), "genişlik geniş boyut yazı width"),
+    e(0, "pill-media", n_("Pil"), n_("Medya denetimi"), n_("Çalan medya kendi düğmeleriyle; > sonraki kaynak"), "medya müzik oynatıcı denetim kaynak media player"),
     e(0, "pill-second", n_("Pil"), n_("İki etkinlik birden"), n_("Sıradaki etkinlik öndekinin yanında"), "iki etkinlik ikinci yan yana çift"),
     e(0, "pill-icons", n_("Pil"), n_("Simge olarak"), n_("Arkadaki iki etkinliğin simgesi; kapalıyken şeritler"), "simge ikon arka şerit"),
     e(0, "hover-open", n_("Pil"), n_("Üzerinde durunca aç"), n_("İmleç pilde bekleyince kartı açılır"), "üzerinde bekle hover aç kart"),

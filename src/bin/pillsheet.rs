@@ -194,7 +194,7 @@ fn main() -> Result<()> {
     let pills = rows;
     let text = TextKit::new()?;
     let (pad, pill_h, row_h) = (24.0, s.px(32.0), s.px(40.0));
-    let row_w = 1160.0;
+    let row_w = 1460.0;
     let (w, h) = (row_w + 2.0 * pad, pad * 2.0 + pills.len() as f32 * (row_h + 8.0));
     unsafe {
         let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
@@ -219,7 +219,9 @@ fn main() -> Result<()> {
             ink.rrect(rect(pad, y, row_w, row_h), 6.0, rgba(0x20, 0x20, 0x20, 1.0))?;
             ink.text(label, rect(pad + 12.0, y, 180.0, row_h), &TextStyle::new(Face::Text, Weight::Regular, 13.0, white(0.7)))?;
             let pw = s.even_px(content.width_dip());
-            let ex = pebbly::render::pill::Extras { second: !extras.is_empty(), icons: extras.len().saturating_sub(1), slivers: false };
+            let media = matches!(extras.first(), Some(PillContent::Media(_))) && !matches!(content, PillContent::Media(_));
+            let rest = &extras[media as usize..];
+            let ex = pebbly::render::pill::Extras { second: !rest.is_empty(), icons: rest.len().saturating_sub(1), slivers: false, media, switch: media };
             let ew = s.even_px(ex.dip());
             let (x, py) = (pad + 220.0, y + (row_h - pill_h) / 2.0);
             // The body: #121212 at 92 % and, for these pills, the accent sweeping in from the left.
@@ -241,7 +243,8 @@ fn main() -> Result<()> {
             }
             if !extras.is_empty() {
                 dc.SetTransform(&windows_numerics::Matrix3x2 { M31: x + pw, M32: py, ..saved });
-                pebbly::render::pill::paint_extras(&ink, extras.first(), &extras[1..], pill_h, &s)?;
+                let m = match extras.first() { Some(PillContent::Media(m)) if media => Some((m, true)), _ => None };
+                pebbly::render::pill::paint_extras(&ink, rest.first(), m, rest.get(1..).unwrap_or(&[]), pill_h, &s)?;
             }
             dc.SetTransform(&saved);
             // Compact: the same paint cut at a circle as wide as the pill is tall.

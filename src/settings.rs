@@ -178,6 +178,8 @@ pub struct Settings {
     pub pill_second: bool,
     /// What's behind shows as up to two icons at the pill's end (off: the slivers).
     pub pill_icons: bool,
+    /// A media player of its own in the pill while something plays (or is paused).
+    pub pill_media: bool,
     /// The pointer resting on the pill this long (tenths of a second) opens its card; 0 = off.
     pub hover_open_ds: u32,
     pub card_size: CardSize,
@@ -383,6 +385,7 @@ impl Default for Settings {
             pill_width_pct: 120,
             pill_second: true,
             pill_icons: true,
+            pill_media: true,
             hover_open_ds: 8,
             card_size: CardSize::Large,
             card_blur: true,

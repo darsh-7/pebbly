@@ -316,6 +316,14 @@ export component AppearanceInspector inherits VerticalLayout {
             }
         }
         IRow {
+            label: @tr("Medya denetimi");
+            note: @tr("Çalan medya kendi düğmeleriyle; > sonraki kaynak");
+            Toggle {
+                checked <=> Store.pill-media;
+                toggled => { Ui.changed(); }
+            }
+        }
+        IRow {
             label: @tr("Arkadakileri göster");
             Toggle {
                 checked <=> Store.pill-slivers;

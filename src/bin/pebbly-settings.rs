@@ -431,6 +431,7 @@ fn fill(ui: &SettingsWindow, s: &Settings, live_apps: &[String]) {
     st.set_pill_width(s.pill_width_pct as f32);
     st.set_pill_second(s.pill_second);
     st.set_pill_icons(s.pill_icons);
+    st.set_pill_media(s.pill_media);
     st.set_hover_open(s.hover_open_ds as f32);
     st.set_net_on(s.net_on);
     st.set_accent(s.accent_color.to_uppercase().into());
@@ -573,6 +574,7 @@ fn read(ui: &SettingsWindow, base: &Settings) -> Settings {
         pill_width_pct: st.get_pill_width().round() as u32,
         pill_second: st.get_pill_second(),
         pill_icons: st.get_pill_icons(),
+        pill_media: st.get_pill_media(),
         hover_open_ds: st.get_hover_open().round() as u32,
         net_on: st.get_net_on(),
         accent_color: st.get_accent().to_string(),

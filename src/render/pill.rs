@@ -61,32 +61,40 @@ pub struct Extras {
     pub second: bool,
     pub icons: usize,
     pub slivers: bool,
+    /// A media player of its own after the second event (the first one in `behind`).
+    pub media: bool,
+    /// More than one player: the media slot's switch button.
+    pub switch: bool,
 }
 
 impl Extras {
     /// The most the settings can ask for.
-    const MOST_DIP: f32 = SECOND_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP;
+    const MOST_DIP: f32 = SECOND_DIP + MEDIA_SLOT_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP;
 
-    /// From the settings, for `behind` events behind the front one.
-    pub fn wanted(behind: usize) -> Extras {
+    /// From the settings, for `behind` events behind the front one (not counting the media
+    /// slot's) and `players` media sessions that could take the media slot.
+    pub fn wanted(behind: usize, players: usize) -> Extras {
         let s = crate::settings::current();
         let second = s.pill_second && behind > 0;
         let icons = if s.pill_slivers && s.pill_icons { behind.saturating_sub(second as usize).min(2) } else { 0 };
-        Extras { second, icons, slivers: s.pill_slivers && !s.pill_icons }
+        let media = s.pill_media && players > 0;
+        Extras { second, icons, slivers: s.pill_slivers && !s.pill_icons, media, switch: media && players > 1 }
     }
 
-    /// The same with less (the taskbar is short of room): first no icons, then no second.
+    /// The same with less (the taskbar is short of room): first no icons, then no second, then
+    /// no media slot.
     pub fn less(self) -> Option<Extras> {
         match self {
             Extras { icons: 1.., .. } => Some(Extras { icons: 0, ..self }),
             Extras { second: true, .. } => Some(Extras { second: false, ..self }),
+            Extras { media: true, .. } => Some(Extras { media: false, switch: false, ..self }),
             _ => None,
         }
     }
 
     pub fn dip(&self) -> f32 {
         let icons = if self.icons > 0 { self.icons as f32 * ICON_STEP_DIP + ICONS_END_DIP } else { 0.0 };
-        (if self.second { SECOND_DIP } else { 0.0 }) + icons
+        (if self.second { SECOND_DIP } else { 0.0 }) + (if self.media { MEDIA_SLOT_DIP } else { 0.0 }) + icons
     }
 }
 pub const MAX_SLIVERS: usize = 4;
@@ -101,6 +109,23 @@ const FADE_OUT_MS: i64 = 150;
 const FADE_IN_MS: i64 = 200;
 /// Media pill: title starts here; the three transport buttons sit at the right.
 const MEDIA_TEXT_X_DIP: f32 = 36.0;
+/// The media slot, a small player on the cover's colour: cover, title over artist, shuffle,
+/// prev, play, next, repeat and (more than one player) the switch.
+pub const MEDIA_SLOT_DIP: f32 = 290.0;
+/// The media slot's buttons: centre from its right edge, [`PillButton::Slot`]'s number, width.
+const SLOT_BUTTONS_DIP: [(f32, u8, f32); 6] = [(136.0, 5, 22.0), (113.0, 0, 24.0), (87.0, 1, 28.0), (61.0, 2, 24.0), (38.0, 6, 22.0), (15.0, 3, 20.0)];
+/// Where the title stops, from the slot's right edge.
+const SLOT_TEXT_END_DIP: f32 = 150.0;
+
+/// The media slot's buttons this player has (shuffle and repeat only if it takes them).
+fn slot_buttons(m: &MediaSnapshot, switch: bool) -> impl Iterator<Item = (f32, u8, f32)> + '_ {
+    SLOT_BUTTONS_DIP.into_iter().filter(move |(_, n, _)| match n {
+        5 => m.can.shuffle,
+        6 => m.can.repeat,
+        3 => switch,
+        _ => true,
+    })
+}
 const MEDIA_BUTTONS_DIP: [(f32, PillButton); 3] = [(80.0, PillButton::Prev), (50.0, PillButton::PlayPause), (20.0, PillButton::Next)];
 const MEDIA_PLAY_ONLY_DIP: [(f32, PillButton); 1] = [(22.0, PillButton::PlayPause)];
 
@@ -328,6 +353,9 @@ pub enum PillButton {
     Next,
     /// The second event or an icon at the pill's end: brings that one (index into `behind`) to the front.
     Behind(u8),
+    /// The media slot: 0 previous, 1 play/pause, 2 next, 3 the next player, 4 (its cover and
+    /// title) its full player card, 5 shuffle, 6 repeat.
+    Slot(u8),
 }
 
 fn color(a: u8, (r, g, b): (u8, u8, u8)) -> Color {
@@ -807,7 +835,7 @@ impl PillVisual {
         let ex = if compact { Extras::default() } else { ex };
         let l = if compact { compact_layout(front, s) } else { layout_with(front, ex, s) };
         // The second event and the icons take the first ones behind; slivers (if on) the rest.
-        let shown = (ex.second as usize + ex.icons).min(behind.len());
+        let shown = (ex.media as usize + ex.second as usize + ex.icons).min(behind.len());
         let (at_end, rest) = behind.split_at(shown);
         self.show_extras(g, at_end, ex, l, s)?;
         let behind = if ex.slivers { &rest[..rest.len().min(MAX_SLIVERS)] } else { &[] };
@@ -897,17 +925,34 @@ impl PillVisual {
             return Ok(());
         }
         let x0 = l.pill_w - l.extras_w;
+        let (media, items) = match items.split_first() {
+            Some((PillContent::Media(m), rest)) if ex.media => (Some(m), rest),
+            _ => (None, items),
+        };
         let (second, icons) = if ex.second { (items.first(), &items[1..]) } else { (None, items) };
+        // `behind`'s numbers: the media slot's one is first.
+        let at = media.is_some() as usize;
         let second_w = if second.is_some() { s.px(SECOND_DIP) as i32 } else { 0 };
         if second.is_some() {
-            self.extra_buttons.push((x0, x0 + second_w, PillButton::Behind(0)));
+            self.extra_buttons.push((x0, x0 + second_w, PillButton::Behind(at as u8)));
+        }
+        let mut x = x0 + second_w;
+        if let Some(m) = media {
+            let w = s.px(MEDIA_SLOT_DIP) as i32;
+            for (from_right, n, bw) in slot_buttons(m, ex.switch) {
+                let (c, bw) = (x + w - s.px(from_right) as i32, s.px(bw) as i32);
+                self.extra_buttons.push((c - bw / 2, c + bw / 2, PillButton::Slot(n)));
+            }
+            // The rest of it (art and title) brings it to the front; the buttons are found first.
+            self.extra_buttons.push((x, x + w, PillButton::Slot(4)));
+            x += w;
         }
         let step = s.px(ICON_STEP_DIP) as i32;
         for i in 0..icons.len() {
-            let from = x0 + second_w + i as i32 * step;
-            self.extra_buttons.push((from, from + step, PillButton::Behind((ex.second as usize + i) as u8)));
+            let from = x + i as i32 * step;
+            self.extra_buttons.push((from, from + step, PillButton::Behind((at + ex.second as usize + i) as u8)));
         }
-        paint_surface(g, &self.extras_surface, l.extras_w, l.pill_h, |ink| paint_extras(ink, second, icons, l.pill_h as f32, s))
+        paint_surface(g, &self.extras_surface, l.extras_w, l.pill_h, |ink| paint_extras(ink, second, media.map(|m| (m, ex.switch)), icons, l.pill_h as f32, s))
     }
 
     /// Springs the pill to `w` px from wherever it is now (an interrupted spring carries on
@@ -1318,17 +1363,71 @@ fn shifted(ink: &Ink, dx: f32, clip: D2D_RECT_F, paint: impl FnOnce(&Ink) -> Res
 
 /// The second event (its own pill's look at [`SECOND_DIP`], after a thin divider) and the icons
 /// after it: each one's circle as its pill draws it.
-pub fn paint_extras(ink: &Ink, second: Option<&PillContent>, icons: &[PillContent], h: f32, s: &Scale) -> Result<()> {
+pub fn paint_extras(ink: &Ink, second: Option<&PillContent>, media: Option<(&MediaSnapshot, bool)>, icons: &[PillContent], h: f32, s: &Scale) -> Result<()> {
     let d = |v: f32| v * s.0;
+    let divider = |x: f32| ink.rrect(rect(x, (h * 0.25).round(), d(1.0).max(1.0), (h * 0.5).round()), 0.0, white(0.18));
     let mut x = 0.0;
     if let Some(c) = second {
         let w = d(SECOND_DIP);
-        ink.rrect(rect(0.0, (h * 0.25).round(), d(1.0).max(1.0), (h * 0.5).round()), 0.0, white(0.18))?;
+        divider(0.0)?;
         shifted(ink, d(2.0), rect(0.0, 0.0, w - d(2.0), h), |ink| match c {
             PillContent::Media(m) => paint_media_brief(ink, m, w - d(2.0), h, s),
             _ => paint_pill_content(ink, c, w - d(2.0), h, s),
         })?;
         x = w;
+    }
+    if let Some((m, switch)) = media {
+        let w = d(MEDIA_SLOT_DIP);
+        // The cover's colour, fading to the right, like a player card.
+        let [r, g, b] = m.accent;
+        let (top, inner_h) = (d(3.0), h - d(6.0));
+        ink.hgradient(rect(x + d(4.0), top, w - d(6.0), inner_h), inner_h / 2.0, rgba(r, g, b, 0.85), rgba(r, g, b, 0.30))?;
+        // The cover, a rounded square.
+        let side = d(22.0);
+        let cover = rect(x + d(8.0), ((h - side) / 2.0).round(), side, side);
+        match &m.art {
+            Some(art) => ink.image_rounded(art, m.art_size, rect(0.0, 0.0, m.art_size.0 as f32, m.art_size.1 as f32), cover, d(5.0))?,
+            None => {
+                ink.rrect(cover, d(5.0), white(0.25))?;
+                let st = TextStyle::new(Face::Icons, Weight::Regular, d(12.0), white(0.9)).centered();
+                ink.text(&glyph(Icon::Music).to_string(), cover, &st)?;
+            }
+        }
+        // Title over the artist (or the app).
+        let tx = x + d(36.0);
+        let tw = w - d(36.0) - d(SLOT_TEXT_END_DIP);
+        let sub = if m.artist.is_empty() { &m.app_name } else { &m.artist };
+        let title = TextStyle::new(Face::Text, Weight::SemiBold, d(11.5), white(1.0)).ellipsis();
+        let small = TextStyle::new(Face::Text, Weight::Regular, d(10.0), white(0.72)).ellipsis();
+        ink.text(&m.title, rect(tx, h / 2.0 - d(13.0), tw, d(14.0)), &title)?;
+        ink.text(sub, rect(tx, h / 2.0, tw, d(13.0)), &small)?;
+        let dim = |on: bool| white(if on { 1.0 } else { 0.4 });
+        for (from_right, n, bw) in slot_buttons(m, switch) {
+            let c = x + w - d(from_right);
+            let cell = rect(c - d(bw) / 2.0, 0.0, d(bw), h);
+            let icon = |icon: Icon, size: f32, colour: [f32; 4]| ink.text(&glyph(icon).to_string(), cell, &TextStyle::new(Face::Icons, Weight::Regular, d(size), colour).centered());
+            match n {
+                // Play: a white disc with the icon in the cover's dark.
+                1 => {
+                    let disc = d(22.0);
+                    ink.rrect(rect(c - disc / 2.0, ((h - disc) / 2.0).round(), disc, disc), disc / 2.0, white(if m.can.play_pause { 1.0 } else { 0.5 }))?;
+                    icon(if m.playing { Icon::Pause } else { Icon::Play }, 11.0, rgba(0x12, 0x12, 0x12, 1.0))?;
+                }
+                0 => icon(Icon::Prev, 13.0, dim(m.can.prev))?,
+                2 => icon(Icon::Next, 13.0, dim(m.can.next))?,
+                // Shuffle and repeat: bright with a dot when on.
+                5 | 6 => {
+                    let on = if n == 5 { m.shuffle } else { m.repeat } == Some(true);
+                    icon(if n == 5 { Icon::Shuffle } else { Icon::Repeat }, 12.0, white(if on { 1.0 } else { 0.55 }))?;
+                    if on {
+                        let dot = d(3.0);
+                        ink.rrect(rect(c - dot / 2.0, h / 2.0 + d(8.0), dot, dot), dot / 2.0, white(1.0))?;
+                    }
+                }
+                _ => icon(Icon::ChevronRight, 11.0, white(0.85))?,
+            }
+        }
+        x += w;
     }
     let side = d(24.0);
     for c in icons {
@@ -2326,13 +2425,15 @@ mod tests {
     /// at its own, shows the circle with 4 DIP all round.
     #[test]
     fn extras_give_way_icons_first_then_the_second() {
-        let all = Extras { second: true, icons: 2, slivers: false };
-        assert_eq!(all.dip(), SECOND_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP);
+        let all = Extras { second: true, icons: 2, slivers: false, media: true, switch: true };
+        assert_eq!(all.dip(), SECOND_DIP + MEDIA_SLOT_DIP + 2.0 * ICON_STEP_DIP + ICONS_END_DIP);
         let a = all.less().unwrap();
-        assert_eq!((a.second, a.icons), (true, 0));
+        assert_eq!((a.second, a.icons, a.media), (true, 0, true));
         let b = a.less().unwrap();
-        assert_eq!((b.second, b.icons, b.dip()), (false, 0, 0.0));
-        assert!(b.less().is_none());
+        assert_eq!((b.second, b.icons, b.dip()), (false, 0, MEDIA_SLOT_DIP));
+        let c = b.less().unwrap();
+        assert_eq!((c.media, c.switch, c.dip()), (false, false, 0.0));
+        assert!(c.less().is_none());
         // Both fit in the frame at the widest setting.
         assert!(Extras::MOST_DIP >= all.dip());
     }

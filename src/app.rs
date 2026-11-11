@@ -655,6 +655,10 @@ pub struct App {
     stack: Vec<ActivityKind>,
     /// What the pill's second event and icons are (a click on one brings it to the front).
     behind_kinds: Vec<ActivityKind>,
+    /// The media slot's player, picked with its switch (else the first one in the stack).
+    media_pick: Option<u32>,
+    /// The one the media slot shows now.
+    media_slot: Option<u32>,
     user_front: Option<(ActivityKind, u64)>,
     card_state: CardState,
     open: Option<OpenCard>,
@@ -970,6 +974,8 @@ impl App {
             front: None,
             stack: Vec::new(),
             behind_kinds: Vec::new(),
+            media_pick: None,
+            media_slot: None,
             user_front: None,
             card_state: CardState::Closed,
             open: None,
@@ -2415,14 +2421,19 @@ impl App {
             }
             Some(front) => {
                 let s = settings::current();
-                let (kinds, behind): (Vec<ActivityKind>, Vec<PillContent>) = if (s.pill_slivers || s.pill_second) && !hint {
+                let (mut kinds, mut behind): (Vec<ActivityKind>, Vec<PillContent>) = if (s.pill_slivers || s.pill_second || s.pill_media) && !hint {
                     // `get`: a file drag shows the shelf's pill even with nothing in the stack.
                     self.stack.get(1..).unwrap_or(&[]).iter().filter_map(|k| self.pill_content(*k, now).map(|c| (*k, c))).unzip()
                 } else {
                     Default::default()
                 };
                 // The most that fits beside the taskbar's buttons: less before the circle only.
-                let mut ex = Extras::wanted(behind.len());
+                // The media slot: the picked player (or the first one) behind the front, taken
+                // out of the rest so it shows once.
+                let players: Vec<u32> = kinds.iter().filter_map(|k| if let ActivityKind::Media(id) = k { Some(*id) } else { None }).collect();
+                let slot = self.media_pick.filter(|id| players.contains(id)).or(players.first().copied()).filter(|_| s.pill_media);
+                let slot = slot.and_then(|id| kinds.iter().position(|k| *k == ActivityKind::Media(id))).map(|i| (kinds.remove(i), behind.remove(i)));
+                let mut ex = Extras::wanted(behind.len(), if slot.is_some() { players.len() } else { 0 });
                 let placed = loop {
                     match (self.pill_at(front.width_dip() + ex.dip()), ex.less()) {
                         (Some((_, true)) | None, Some(less)) => ex = less,
@@ -2430,6 +2441,15 @@ impl App {
                     }
                 };
                 let (pill, compact) = placed.unwrap_or_else(|| (Self::pill_home(&self.ui.info, &self.ui.pill_scale, front.width_dip() + ex.dip()), false));
+                self.media_slot = None;
+                if let Some((k, c)) = slot {
+                    // First in `behind` (the slot's place); no room for it: the next one.
+                    if let ActivityKind::Media(id) = k {
+                        self.media_slot = ex.media.then_some(id);
+                    }
+                    kinds.insert(0, k);
+                    behind.insert(0, c);
+                }
                 self.behind_kinds = kinds;
                 let front_changed = self.front.as_ref() != Some(&front);
                 let fade = self.front.as_ref().is_some_and(|f| !f.same_kind(&front));
@@ -4271,6 +4291,32 @@ impl App {
                     (_, Some(PillButton::Prev)) => self.media_command(MediaCommand::Prev),
                     (_, Some(PillButton::PlayPause)) => self.media_command(MediaCommand::PlayPause),
                     (_, Some(PillButton::Next)) => self.media_command(MediaCommand::Next),
+                    (_, Some(PillButton::Slot(n))) => match (self.media_slot, n) {
+                        (Some(id), 0..=2 | 5 | 6) => {
+                            let c = match n {
+                                0 => MediaCommand::Prev,
+                                1 => MediaCommand::PlayPause,
+                                2 => MediaCommand::Next,
+                                5 => MediaCommand::ToggleShuffle,
+                                _ => MediaCommand::CycleRepeat,
+                            };
+                            self.media_worker.send(id, c);
+                            Ok(())
+                        }
+                        (Some(id), 3) => {
+                            // The next player behind the front, round to the first.
+                            let players: Vec<u32> = self.stack.iter().skip(1).filter_map(|k| if let ActivityKind::Media(p) = k { Some(*p) } else { None }).collect();
+                            let i = players.iter().position(|p| *p == id).map_or(0, |i| (i + 1) % players.len().max(1));
+                            self.media_pick = players.get(i).copied();
+                            self.refresh()
+                        }
+                        (Some(id), _) => {
+                            self.user_front = Some((ActivityKind::Media(id), now_ms()));
+                            self.refresh()?;
+                            self.toggle_card(OpenCard::Activity(ActivityKind::Media(id)), true)
+                        }
+                        (None, _) => Ok(()),
+                    },
                     (_, Some(PillButton::Behind(i))) => match self.behind_kinds.get(i as usize) {
                         Some(kind) => {
                             self.user_front = Some((*kind, now_ms()));
