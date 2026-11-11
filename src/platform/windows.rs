@@ -48,6 +48,8 @@ pub enum CardEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiEvent {
     Pill(PillEvent),
+    /// The media player beside the pill (its own window): clicks, wheel, hover.
+    Player(PillEvent),
     Card(CardEvent),
     Timer(usize),
     /// Another process's window came to the foreground.
@@ -269,6 +271,7 @@ pub fn post_watch() {
 thread_local! {
     static EVENTS: RefCell<VecDeque<UiEvent>> = const { RefCell::new(VecDeque::new()) };
     static HOVER_PILL: RefCell<bool> = const { RefCell::new(false) };
+    static HOVER_PLAYER: RefCell<bool> = const { RefCell::new(false) };
     static HOVER_CARD: RefCell<bool> = const { RefCell::new(false) };
     /// Where the left button went down on the pill, and whether that press became a drag.
     static PILL_PRESS: std::cell::Cell<Option<(i32, i32, bool)>> = const { std::cell::Cell::new(None) };
@@ -387,6 +390,32 @@ extern "system" fn pill_input_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM)
         WM_TIMER => {
             push_event(UiEvent::Timer(wp.0));
             LRESULT(0)
+        }
+        _ => unsafe { DefWindowProcW(hwnd, msg, wp, lp) },
+    }
+}
+
+/// The media player's input: its own events, no drag (nothing to drop or pull out of it).
+extern "system" fn player_input_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    let player = |e| {
+        push_event(UiEvent::Player(e));
+        LRESULT(0)
+    };
+    match msg {
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE),
+        WM_LBUTTONUP => player(PillEvent::Click { x: x_of(lp) }),
+        WM_MBUTTONUP => player(PillEvent::MiddleClick),
+        WM_RBUTTONUP => player(PillEvent::RightClick),
+        WM_MOUSEWHEEL | WM_MOUSEHWHEEL => player(PillEvent::Wheel(wheel_of(wp))),
+        WM_MOUSEMOVE => {
+            if track_enter(hwnd, &HOVER_PLAYER) {
+                push_event(UiEvent::Player(PillEvent::Hover(true)));
+            }
+            LRESULT(0)
+        }
+        WM_MOUSELEAVE => {
+            HOVER_PLAYER.with(|h| *h.borrow_mut() = false);
+            player(PillEvent::Hover(false))
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wp, lp) },
     }
@@ -554,15 +583,17 @@ const PASSIVE_CLASS: PCWSTR = w!("PebblyVisual");
 const MAIN_CLASS: PCWSTR = w!("PebblyMain");
 const PILL_INPUT_CLASS: PCWSTR = w!("PebblyPillInput");
 const CARD_INPUT_CLASS: PCWSTR = w!("PebblyCardInput");
+const PLAYER_INPUT_CLASS: PCWSTR = w!("PebblyPlayerInput");
 
 fn register_classes() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| unsafe {
         let instance = GetModuleHandleW(None).unwrap_or_default().into();
         let arrow = LoadCursorW(None, IDC_ARROW).unwrap_or_default();
-        let classes: [(PCWSTR, WNDPROC); 4] = [
+        let classes: [(PCWSTR, WNDPROC); 5] = [
             (PASSIVE_CLASS, Some(passive_proc)),
             (PILL_INPUT_CLASS, Some(pill_input_proc)),
+            (PLAYER_INPUT_CLASS, Some(player_input_proc)),
             (CARD_INPUT_CLASS, Some(card_input_proc)),
             (MAIN_CLASS, Some(main_proc)),
         ];
@@ -627,6 +658,15 @@ impl PillWindow {
     /// `frame_w` the pill frame's width, in screen pixels. The window never moves: the pill
     /// glides inside it, which a moving child window can't do smoothly.
     pub fn create(g: &Gfx, bar: HWND, lane: RectPx, frame_w: i32) -> Result<Self> {
+        Self::create_with(g, bar, lane, frame_w, PILL_INPUT_CLASS)
+    }
+
+    /// The media player's window: the pill's kind, with input of its own ([`UiEvent::Player`]).
+    pub fn create_player(g: &Gfx, bar: HWND, lane: RectPx) -> Result<Self> {
+        Self::create_with(g, bar, lane, 1, PLAYER_INPUT_CLASS)
+    }
+
+    fn create_with(g: &Gfx, bar: HWND, lane: RectPx, frame_w: i32, input_class: PCWSTR) -> Result<Self> {
         let ex = WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
         let hwnd = create(PASSIVE_CLASS, ex, lane)?;
         unsafe { SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA)? };
@@ -636,7 +676,7 @@ impl PillWindow {
         stage.SetSize(windows_numerics::Vector2 { X: frame_w as f32, Y: lane.h as f32 })?;
         root.Children()?.InsertAtTop(&stage)?;
 
-        let input = create(PILL_INPUT_CLASS, WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, lane)?;
+        let input = create(input_class, WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, lane)?;
         taskbar::embed(input, bar, lane)?;
         // Alpha 1: invisible but still hit-testable. Set after embedding; set before, a layered
         // child keeps an opaque (black) surface.
@@ -716,6 +756,7 @@ impl Drop for PillWindow {
     fn drop(&mut self) {
         // Gone under the mouse: no WM_MOUSELEAVE comes, and the next window must track again.
         HOVER_PILL.with(|h| *h.borrow_mut() = false);
+        HOVER_PLAYER.with(|h| *h.borrow_mut() = false);
         super::dragdrop::revoke(self.input);
         unsafe {
             let _ = DestroyWindow(self.input);

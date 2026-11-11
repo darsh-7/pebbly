@@ -105,7 +105,7 @@ use crate::render::gfx::{is_device_lost, Gfx};
 use crate::render::layout::{card_rect, fit_pill, frame_x, lerp_rect, pill_fit, pill_rect, RectPx, Scale, TaskbarInfo};
 use crate::render::morph::{Morph, SHADOW_BLUR_DIP, SHADOW_DY_DIP};
 use crate::render::motion::{speed_factor, spring_at, SPRING_DURATION_S};
-use crate::render::pill::{layout_for, waveform_levels, Extras, PillButton, PillContent, PillLayout, PillVisual, MAX_SLIVERS, PILL_H_DIP, SLIVER_STEP_DIP};
+use crate::render::pill::{layout_for, waveform_levels, Extras, PillButton, PillContent, PillLayout, PillVisual, PlayerVisual, MAX_SLIVERS, PILL_H_DIP, PLAYER_CARD, PLAYER_DIP, PLAYER_GAP_DIP, SLIVER_STEP_DIP};
 
 /// Widest and tallest card (370 DIP; a full Now Brief, screen time included, is 566 tall); the
 /// card window is that plus shadow room and never resizes.
@@ -577,6 +577,9 @@ struct Ui {
     pill_window: PillWindow,
     pill: PillVisual,
     pill_layout: PillLayout,
+    /// The media player beside the pill (the settings' "separate media player").
+    player_window: PillWindow,
+    player: PlayerVisual,
     card_window: CardWindow,
     card: CardVisual,
     morph: Morph,
@@ -603,6 +606,9 @@ impl Ui {
             log(&format!("shelf: the pill takes no drops ({e})"));
         }
         let pill = PillVisual::new(gfx, &pill_window.stage)?;
+        let player_window = PillWindow::create_player(gfx, bar, lane)?;
+        player_window.set_visible(false);
+        let player = PlayerVisual::new(gfx, &player_window.stage)?;
         let card_window = CardWindow::create(gfx, App::card_frame(&info, &card_scale, pill_r))?;
         if let Err(e) = dragdrop::register(card_window.input, DropZone::Card) {
             log(&format!("shelf: the card takes no drops ({e})"));
@@ -620,6 +626,8 @@ impl Ui {
             pill_window,
             pill,
             pill_layout: layout_for(&placeholder, &pill_scale),
+            player_window,
+            player,
             card_window,
             card,
             morph,
@@ -655,10 +663,14 @@ pub struct App {
     stack: Vec<ActivityKind>,
     /// What the pill's second event and icons are (a click on one brings it to the front).
     behind_kinds: Vec<ActivityKind>,
-    /// The media slot's player, picked with its switch (else the first one in the stack).
+    /// The player's session, picked with its switch (else the playing one).
     media_pick: Option<u32>,
-    /// The one the media slot shows now.
-    media_slot: Option<u32>,
+    /// The session the player shows now, and where it is.
+    player_id: Option<u32>,
+    player_rect: Option<RectPx>,
+    /// The open card came from the player: it opens and closes at the player, not the pill.
+    card_on_player: bool,
+    player_open_next: bool,
     user_front: Option<(ActivityKind, u64)>,
     card_state: CardState,
     open: Option<OpenCard>,
@@ -975,7 +987,10 @@ impl App {
             stack: Vec::new(),
             behind_kinds: Vec::new(),
             media_pick: None,
-            media_slot: None,
+            player_id: None,
+            player_rect: None,
+            card_on_player: false,
+            player_open_next: false,
             user_front: None,
             card_state: CardState::Closed,
             open: None,
@@ -1212,6 +1227,7 @@ impl App {
         if fullscreen {
             self.hide_card_now()?;
             self.ui.pill_window.set_visible(false);
+            self.ui.player_window.set_visible(false);
             self.note_pill(false, &format!("fullscreen: {}", foreground_exe().unwrap_or_default()));
             return Ok(());
         }
@@ -1295,7 +1311,57 @@ impl App {
         RectPx { x: frame_x(info, cx, w), y: top, w, h: info.rect.bottom() - top }
     }
 
+    /// The sessions the player can show (playing first, as Windows lists them otherwise).
+    fn player_sessions(&self) -> Vec<&MediaSnapshot> {
+        let s = settings::current();
+        if !(s.enabled && s.media_enabled && s.pill_media) {
+            return Vec::new();
+        }
+        let hidden = |m: &MediaSnapshot| s.media_hidden_apps.iter().any(|a| m.app_id.eq_ignore_ascii_case(a));
+        let mut v: Vec<&MediaSnapshot> = self.media.iter().filter(|m| !hidden(m)).collect();
+        v.sort_by_key(|m| !m.playing);
+        v
+    }
+
+    /// The player's session: the picked one while it's there, else the first; and whether
+    /// there are others to switch to.
+    fn player_media(&self) -> Option<(MediaSnapshot, bool)> {
+        let all = self.player_sessions();
+        let m = self.media_pick.and_then(|id| all.iter().find(|m| m.id == id)).or(all.first())?;
+        Some(((*m).clone(), all.len() > 1))
+    }
+
+    /// The player at `at`, or hidden.
+    fn place_player(&mut self, player: Option<(MediaSnapshot, bool)>, at: Option<RectPx>) -> Result<()> {
+        match (player, at) {
+            (Some((m, switch)), Some(r)) if !self.fullscreen => {
+                self.ui.player.show(&self.gfx, &m, switch, r.w, r.h, &self.ui.pill_scale)?;
+                self.ui.player_window.place(r, r.w, r.h / 2, false)?;
+                self.ui.player_window.set_visible(true);
+                self.player_id = Some(m.id);
+                self.player_rect = Some(r);
+            }
+            _ => {
+                self.ui.player_window.set_visible(false);
+                self.player_id = None;
+                self.player_rect = None;
+            }
+        }
+        Ok(())
+    }
+
+    /// The player's switch: the next session, round to the first.
+    fn switch_player(&mut self) -> Result<()> {
+        let ids: Vec<u32> = self.player_sessions().iter().map(|m| m.id).collect();
+        let i = self.player_id.and_then(|id| ids.iter().position(|p| *p == id)).map_or(0, |i| (i + 1) % ids.len().max(1));
+        self.media_pick = ids.get(i).copied();
+        self.refresh()
+    }
+
     fn pill_screen(&self) -> RectPx {
+        if let (true, Some(r)) = (self.card_on_player, self.player_rect) {
+            return r;
+        }
         let width = self.front.as_ref().map_or(176.0, PillContent::width_dip);
         self.pill_at(width).map_or_else(|| Self::pill_home(&self.ui.info, &self.ui.pill_scale, width), |(r, _)| r)
     }
@@ -1331,7 +1397,7 @@ impl App {
             p.push(Presence { kind: ActivityKind::Stopwatch, state, changed_ms: slot.changed_ms });
         }
         let hidden = |m: &MediaSnapshot| s.media_hidden_apps.iter().any(|a| m.app_id.eq_ignore_ascii_case(a));
-        for m in self.media.iter().filter(|m| s.media_enabled && !hidden(m)) {
+        for m in self.media.iter().filter(|m| s.media_enabled && !s.pill_media && !hidden(m)) {
             let state = if m.playing { PresenceState::Playing } else { PresenceState::Paused };
             p.push(Presence { kind: ActivityKind::Media(m.id), state, changed_ms: m.changed_ms });
         }
@@ -1845,7 +1911,8 @@ impl App {
             }),
             OpenCard::Activity(kind @ ActivityKind::Media(id)) => self.media_of(id).cloned().map(styled).map(|m| {
                 let hold = self.seek_hold.filter(|(held, _)| *held == id).map(|(_, h)| h);
-                let mut card = MediaCard::new(m, filetime_now(), self.output_name.clone(), self.seeking, self.page_of(kind), hold);
+                let pages = if self.card_on_player { (0, 1) } else { self.page_of(kind) };
+                let mut card = MediaCard::new(m, filetime_now(), self.output_name.clone(), self.seeking, pages, hold);
                 card.lyrics = self.lyrics_view(&card);
                 card.show_lyrics = self.show_lyrics;
                 card.pinned = self.card_pinned;
@@ -2398,10 +2465,14 @@ impl App {
         let hint = dragdrop::hover() == Some(DropZone::Pill);
         let front = if hint { Some(self.shelf_pill(true)) } else { self.stack.first().and_then(|k| self.pill_content(*k, now)) };
         let bottom = self.ui.info.bottom;
+        let player = self.player_media().filter(|_| bottom && !hint);
         match front.filter(|_| bottom) {
             None => {
                 self.front = None;
                 self.ui.pill_window.set_visible(false);
+                // The player alone, where the pill would be.
+                let at = self.pill_at(PLAYER_DIP).filter(|(_, compact)| !compact).map(|(r, _)| r);
+                self.place_player(player, at)?;
                 let why = match self.stack.first() {
                     _ if !bottom => "the taskbar isn't at the bottom of the screen".to_string(),
                     None => "nothing active".to_string(),
@@ -2415,41 +2486,45 @@ impl App {
                 // Not even the circle fits between the buttons and the tray: it steps aside
                 // rather than cover them.
                 self.ui.pill_window.set_visible(false);
+                self.place_player(None, None)?;
                 self.note_pill(false, "no room on the taskbar");
                 self.ui.pill.forget_paint();
                 self.front = Some(front);
             }
             Some(front) => {
                 let s = settings::current();
-                let (mut kinds, mut behind): (Vec<ActivityKind>, Vec<PillContent>) = if (s.pill_slivers || s.pill_second || s.pill_media) && !hint {
+                let (kinds, behind): (Vec<ActivityKind>, Vec<PillContent>) = if (s.pill_slivers || s.pill_second) && !hint {
                     // `get`: a file drag shows the shelf's pill even with nothing in the stack.
                     self.stack.get(1..).unwrap_or(&[]).iter().filter_map(|k| self.pill_content(*k, now).map(|c| (*k, c))).unzip()
                 } else {
                     Default::default()
                 };
                 // The most that fits beside the taskbar's buttons: less before the circle only.
-                // The media slot: the picked player (or the first one) behind the front, taken
-                // out of the rest so it shows once.
-                let players: Vec<u32> = kinds.iter().filter_map(|k| if let ActivityKind::Media(id) = k { Some(*id) } else { None }).collect();
-                let slot = self.media_pick.filter(|id| players.contains(id)).or(players.first().copied()).filter(|_| s.pill_media);
-                let slot = slot.and_then(|id| kinds.iter().position(|k| *k == ActivityKind::Media(id))).map(|i| (kinds.remove(i), behind.remove(i)));
-                let mut ex = Extras::wanted(behind.len(), if slot.is_some() { players.len() } else { 0 });
+                let mut ex = Extras::wanted(behind.len());
+                // The player after the pill: short of room, the pill's extras go first, then the player.
+                let mut tail = if player.is_some() { PLAYER_GAP_DIP + PLAYER_DIP } else { 0.0 };
                 let placed = loop {
-                    match (self.pill_at(front.width_dip() + ex.dip()), ex.less()) {
-                        (Some((_, true)) | None, Some(less)) => ex = less,
-                        (at, _) => break at,
+                    let at = self.pill_at(front.width_dip() + ex.dip() + tail);
+                    if matches!(at, Some((_, true)) | None) {
+                        if let Some(less) = ex.less() {
+                            ex = less;
+                            continue;
+                        }
+                        if tail > 0.0 {
+                            tail = 0.0;
+                            continue;
+                        }
                     }
+                    break at;
                 };
-                let (pill, compact) = placed.unwrap_or_else(|| (Self::pill_home(&self.ui.info, &self.ui.pill_scale, front.width_dip() + ex.dip()), false));
-                self.media_slot = None;
-                if let Some((k, c)) = slot {
-                    // First in `behind` (the slot's place); no room for it: the next one.
-                    if let ActivityKind::Media(id) = k {
-                        self.media_slot = ex.media.then_some(id);
-                    }
-                    kinds.insert(0, k);
-                    behind.insert(0, c);
-                }
+                let (all, compact) = placed.unwrap_or_else(|| (Self::pill_home(&self.ui.info, &self.ui.pill_scale, front.width_dip() + ex.dip()), false));
+                let sc = self.ui.pill_scale;
+                let pill = if tail > 0.0 { RectPx { w: sc.even_px(front.width_dip() + ex.dip()) as i32, ..all } } else { all };
+                let player_at = (tail > 0.0).then(|| {
+                    let x = pill.x + pill.w + sc.px(PLAYER_GAP_DIP) as i32;
+                    RectPx { x, w: sc.even_px(PLAYER_DIP) as i32, ..pill }
+                });
+                self.place_player(player.filter(|_| tail > 0.0), player_at)?;
                 self.behind_kinds = kinds;
                 let front_changed = self.front.as_ref() != Some(&front);
                 let fade = self.front.as_ref().is_some_and(|f| !f.same_kind(&front));
@@ -2466,7 +2541,7 @@ impl App {
                 let why = if self.fullscreen { format!("fullscreen: {}", foreground_exe().unwrap_or_default()) } else { format!("front {:?}", self.stack.first()) };
                 self.note_pill(!self.fullscreen, &why);
                 // An open card shrinks back into the pill as it is now (a new track's colours).
-                if front_changed && self.open.is_some_and(OpenCard::grows_from_pill) && matches!(self.card_state, CardState::Opening | CardState::Open) {
+                if front_changed && !self.card_on_player && self.open.is_some_and(OpenCard::grows_from_pill) && matches!(self.card_state, CardState::Opening | CardState::Open) {
                     self.ui.morph.set_pill(&self.ui.pill.look(&front, &self.ui.pill_layout))?;
                 }
                 self.front = Some(front);
@@ -3483,7 +3558,7 @@ impl App {
     fn media_target(&self) -> Option<u32> {
         match (self.open, self.front_kind()) {
             (Some(OpenCard::Activity(ActivityKind::Media(id))), _) | (_, Some(ActivityKind::Media(id))) => Some(id),
-            _ => None,
+            _ => self.player_id,
         }
     }
 
@@ -4046,6 +4121,7 @@ impl App {
         if matches!(self.card_state, CardState::Open | CardState::Opening) {
             return Ok(());
         }
+        self.card_on_player = std::mem::take(&mut self.player_open_next);
         let Some(content) = self.card_content(which, now_ms()) else { return Ok(()) };
         let s = self.ui.card_scale;
         let pill = self.pill_screen();
@@ -4067,7 +4143,7 @@ impl App {
         // Show the card window, start the morph and hide the real pill in this one turn,
         // so the compositor commits them in the same frame.
         self.ui.card_window.show();
-        if which.grows_from_pill() {
+        if which.grows_from_pill() && !self.card_on_player {
             let front = self.front.clone().unwrap_or(PillContent::Timer { text: String::new(), label: "", paused: false });
             self.ui.morph.set_pill(&self.ui.pill.look(&front, &self.ui.pill_layout))?;
             self.ui.morph.open(rel(pill), self.ui.pill_layout.radius as f32, rel(to), to_r)?;
@@ -4115,7 +4191,7 @@ impl App {
         self.ui.card_window.hide_hit();
         // Into the pill as it is now (after a resize the shape's start is the previous card).
         self.stop_brief_idle();
-        if self.open.is_some_and(OpenCard::grows_from_pill) {
+        if self.open.is_some_and(OpenCard::grows_from_pill) && !self.card_on_player {
             let f = self.ui.card_window.frame;
             let pill = self.pill_screen();
             self.ui.morph.set_from(RectPx { x: pill.x - f.x, y: pill.y - f.y, ..pill }, self.ui.pill_layout.radius as f32)?;
@@ -4147,7 +4223,7 @@ impl App {
             return false;
         }
         let inside = |r: RectPx| p.x >= r.x && p.x < r.right() && p.y >= r.y && p.y < r.bottom();
-        !inside(self.card_screen) && !inside(self.pill_screen())
+        !inside(self.card_screen) && !inside(self.pill_screen()) && !self.player_rect.is_some_and(inside)
     }
 
     fn menu(&mut self) -> Result<()> {
@@ -4291,32 +4367,6 @@ impl App {
                     (_, Some(PillButton::Prev)) => self.media_command(MediaCommand::Prev),
                     (_, Some(PillButton::PlayPause)) => self.media_command(MediaCommand::PlayPause),
                     (_, Some(PillButton::Next)) => self.media_command(MediaCommand::Next),
-                    (_, Some(PillButton::Slot(n))) => match (self.media_slot, n) {
-                        (Some(id), 0..=2 | 5 | 6) => {
-                            let c = match n {
-                                0 => MediaCommand::Prev,
-                                1 => MediaCommand::PlayPause,
-                                2 => MediaCommand::Next,
-                                5 => MediaCommand::ToggleShuffle,
-                                _ => MediaCommand::CycleRepeat,
-                            };
-                            self.media_worker.send(id, c);
-                            Ok(())
-                        }
-                        (Some(id), 3) => {
-                            // The next player behind the front, round to the first.
-                            let players: Vec<u32> = self.stack.iter().skip(1).filter_map(|k| if let ActivityKind::Media(p) = k { Some(*p) } else { None }).collect();
-                            let i = players.iter().position(|p| *p == id).map_or(0, |i| (i + 1) % players.len().max(1));
-                            self.media_pick = players.get(i).copied();
-                            self.refresh()
-                        }
-                        (Some(id), _) => {
-                            self.user_front = Some((ActivityKind::Media(id), now_ms()));
-                            self.refresh()?;
-                            self.toggle_card(OpenCard::Activity(ActivityKind::Media(id)), true)
-                        }
-                        (None, _) => Ok(()),
-                    },
                     (_, Some(PillButton::Behind(i))) => match self.behind_kinds.get(i as usize) {
                         Some(kind) => {
                             self.user_front = Some((*kind, now_ms()));
@@ -4460,6 +4510,50 @@ impl App {
                 None => Ok(()),
             },
             // A right-click on the pill opens the settings of what it shows; the tray keeps the menu.
+            UiEvent::Player(PillEvent::Click { x }) => match (self.player_id, self.ui.player.button_at(x)) {
+                (Some(_), Some(3)) => self.switch_player(),
+                (Some(id), Some(PLAYER_CARD)) => match self.card_state {
+                    CardState::Closed => {
+                        self.player_open_next = true;
+                        self.open_card(OpenCard::Activity(ActivityKind::Media(id)), true)
+                    }
+                    CardState::Closing => Ok(()),
+                    CardState::Open | CardState::Opening => self.close_card(),
+                },
+                (Some(id), Some(n)) => {
+                    let c = match n {
+                        0 => MediaCommand::Prev,
+                        1 => MediaCommand::PlayPause,
+                        2 => MediaCommand::Next,
+                        5 => MediaCommand::ToggleShuffle,
+                        _ => MediaCommand::CycleRepeat,
+                    };
+                    self.media_worker.send(id, c);
+                    Ok(())
+                }
+                _ => Ok(()),
+            },
+            UiEvent::Player(PillEvent::MiddleClick) => {
+                if let Some(id) = self.player_id {
+                    self.media_worker.send(id, MediaCommand::PlayPause);
+                }
+                Ok(())
+            }
+            UiEvent::Player(PillEvent::RightClick) => {
+                open_settings_at(self.player_id.map(|id| settings_page_for(ActivityKind::Media(id))));
+                Ok(())
+            }
+            UiEvent::Player(PillEvent::Hover(over)) => {
+                // Like the pill's: the card stays while the pointer is on the player.
+                self.pill_hover = over;
+                if over {
+                    self.disarm_leave();
+                } else if !self.open.is_some_and(OpenCard::takes_keys) {
+                    self.arm_leave();
+                }
+                Ok(())
+            }
+            UiEvent::Player(_) => Ok(()),
             UiEvent::Pill(PillEvent::RightClick) => {
                 open_settings_at(self.front_kind().map(settings_page_for));
                 Ok(())

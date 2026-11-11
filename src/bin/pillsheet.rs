@@ -186,7 +186,7 @@ fn main() -> Result<()> {
     let net = PillContent::Live { key: 7, title: "İnternet".into(), status: "Bağlantı yok".into(), claude: false, state: LiveState::Wait, action: String::new() };
     let timer = PillContent::Timer { text: "04:59".into(), label: "", paused: false };
     let mut rows: Vec<(&str, PillContent, Vec<PillContent>)> = pills.into_iter().map(|(l, c)| (l, c, Vec::new())).collect();
-    rows.insert(0, ("İki + 2 simge", claude.clone(), vec![song(None), timer.clone(), net.clone()]));
+    rows.insert(0, ("Pil + oynatıcı", claude.clone(), vec![timer.clone(), net.clone()]));
     rows.insert(1, ("Antigravity + Claude", agy.clone(), vec![claude.clone(), pc.clone()]));
     rows.insert(2, ("Medya + Claude izin", song(None), vec![PillContent::Live { key: 1, title: "pebbly".into(), status: "İzin istiyor".into(), claude: true, state: LiveState::Wait, action: "Bash".into() }, agy.clone()]));
     rows.insert(3, ("Genel bilgi + zamanlayıcı", pc.clone(), vec![timer.clone()]));
@@ -219,9 +219,7 @@ fn main() -> Result<()> {
             ink.rrect(rect(pad, y, row_w, row_h), 6.0, rgba(0x20, 0x20, 0x20, 1.0))?;
             ink.text(label, rect(pad + 12.0, y, 180.0, row_h), &TextStyle::new(Face::Text, Weight::Regular, 13.0, white(0.7)))?;
             let pw = s.even_px(content.width_dip());
-            let media = matches!(extras.first(), Some(PillContent::Media(_))) && !matches!(content, PillContent::Media(_));
-            let rest = &extras[media as usize..];
-            let ex = pebbly::render::pill::Extras { second: !rest.is_empty(), icons: rest.len().saturating_sub(1), slivers: false, media, switch: media };
+            let ex = pebbly::render::pill::Extras { second: !extras.is_empty(), icons: extras.len().saturating_sub(1), slivers: false };
             let ew = s.even_px(ex.dip());
             let (x, py) = (pad + 220.0, y + (row_h - pill_h) / 2.0);
             // The body: #121212 at 92 % and, for these pills, the accent sweeping in from the left.
@@ -243,8 +241,15 @@ fn main() -> Result<()> {
             }
             if !extras.is_empty() {
                 dc.SetTransform(&windows_numerics::Matrix3x2 { M31: x + pw, M32: py, ..saved });
-                let m = match extras.first() { Some(PillContent::Media(m)) if media => Some((m, true)), _ => None };
-                pebbly::render::pill::paint_extras(&ink, rest.first(), m, rest.get(1..).unwrap_or(&[]), pill_h, &s)?;
+                pebbly::render::pill::paint_extras(&ink, extras.first(), &extras[1..], pill_h, &s)?;
+            }
+            // The first row: the media player beside the pill, as on the taskbar.
+            if let (0, PillContent::Media(m)) = (i, song(None)) {
+                let mut m = m;
+                (m.can.shuffle, m.can.repeat, m.shuffle) = (true, true, Some(true));
+                let gap = s.px(pebbly::render::pill::PLAYER_GAP_DIP);
+                dc.SetTransform(&windows_numerics::Matrix3x2 { M31: x + pw + ew + gap, M32: py, ..saved });
+                pebbly::render::pill::paint_player(&ink, &m, true, s.even_px(pebbly::render::pill::PLAYER_DIP), pill_h, &s)?;
             }
             dc.SetTransform(&saved);
             // Compact: the same paint cut at a circle as wide as the pill is tall.

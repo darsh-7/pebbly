@@ -4179,9 +4179,9 @@ msgid "kesilince ve gelince"
 msgstr "when it drops and comes back"
 
 #: src/settings_ui.rs
-msgid "Medya denetimi"
-msgstr "Media controls"
+msgid "Ayrı medya oynatıcı"
+msgstr "Separate media player"
 
 #: src/settings_ui.rs
-msgid "Çalan medya kendi düğmeleriyle; > sonraki kaynak"
-msgstr "Its own buttons; > next source"
+msgid "Medya pilde değil, yanında kendi oynatıcısında"
+msgstr "Its own player beside the pill"
